@@ -1,0 +1,18 @@
+{
+  "name": "lucky-ticket-draw",
+  "private": true,
+  "workspaces": ["server", "user", "admin"],
+  "scripts": {
+    "dev": "npm-run-all --parallel --print-label dev:server dev:user dev:admin",
+    "dev:server": "npm run dev -w server",
+    "dev:user": "npm run dev -w user",
+    "dev:admin": "npm run dev -w admin",
+    "build": "npm run build -w user && npm run build -w admin && npm run build -w server",
+    "migrate": "npm run migrate -w server",
+    "generate": "npm run generate -w server",
+    "seed": "npm run seed -w server",
+    "test": "npm test -w server"
+  },
+  "dependencies": { "drizzle-orm": "^0.45.4" },
+  "devDependencies": { "npm-run-all": "^4.1.5" }
+}

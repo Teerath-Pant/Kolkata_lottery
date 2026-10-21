@@ -1,0 +1,167 @@
+import { FormEvent, InputHTMLAttributes, ReactNode, useState } from 'react';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Item, Page, item } from '../components/motion';
+import { Button } from '../components/ui';
+import { useToast } from '../components/Toast';
+import { Footer } from '../components/Layout';
+import { Logo, Skyline } from '../components/Logo';
+import { APP_NAME, COIN_NOTE, MOTTO, TAGLINE } from '../config';
+import { useAuth } from '../lib/auth';
+import { headerGradient } from '../theme';
+
+const icon = { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+const PhoneIcon = () => <svg {...icon}><path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2" /></svg>;
+const LockIcon = () => <svg {...icon}><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /><circle cx="12" cy="15.5" r="1.3" /></svg>;
+const UserIcon = () => <svg {...icon}><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg>;
+const EyeIcon = ({ off }: { off: boolean }) => (
+  <svg {...icon}>
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" />
+    {off && <path d="M4 4l16 16" />}
+  </svg>
+);
+
+function Field({ icon: ic, right, ...p }: InputHTMLAttributes<HTMLInputElement> & { icon: ReactNode; right?: ReactNode }) {
+  return (
+    <label className="relative block">
+      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted">{ic}</span>
+      <input
+        {...p}
+        className="w-full rounded-btn border border-line bg-white py-3.5 pl-12 pr-12 text-[15px] text-ink shadow-sm outline-none transition placeholder:text-muted/80 focus:border-brand focus:shadow-glow"
+      />
+      {right}
+    </label>
+  );
+}
+
+const reveal = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: 'auto' }, exit: { opacity: 0, height: 0 } };
+
+export function AuthPage() {
+  const { user, login, register } = useAuth();
+  const nav = useNavigate();
+  const loc = useLocation();
+  const toast = useToast();
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mobile, setMobile] = useState('');
+  const [name, setName] = useState('');
+  const [password, setPassword] = useState('');
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [forgot, setForgot] = useState(false);
+  const to = (loc.state as { from?: string } | null)?.from ?? '/';
+  if (user) return <Navigate to={to} replace />;
+  const isLogin = mode === 'login';
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      if (isLogin) await login(mobile, password);
+      else await register(mobile, name, password);
+      nav(to, { replace: true });
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed', 'error');
+    } finally { setBusy(false); }
+  }
+
+  const switchMode = () => { setMode(isLogin ? 'register' : 'login'); setForgot(false); };
+
+  return (
+    <Page className="flex min-h-[100dvh] flex-col bg-white md:flex-row">
+      {/* tablet/desktop: brand panel on the left */}
+      <Item className="relative hidden overflow-hidden text-white md:flex md:w-1/2 md:flex-col lg:w-[55%]" style={headerGradient}>
+        <div className="flex flex-1 flex-col items-center justify-center px-8 pt-10 text-center">
+          <motion.div animate={{ y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 4, ease: 'easeInOut' }}>
+            <Logo size={240} className="drop-shadow-[0_16px_32px_rgba(0,0,0,0.45)] lg:h-[246px] lg:w-[280px]" />
+          </motion.div>
+          <h1 className="mt-5 text-3xl font-extrabold text-gold lg:text-4xl">{APP_NAME}</h1>
+          <p className="font-script text-3xl font-bold text-white lg:text-4xl">{TAGLINE}</p>
+          <p className="mt-5 -rotate-3 font-script text-2xl font-bold leading-8 text-gold-light lg:text-3xl lg:leading-9">
+            {MOTTO.split('|').map((l) => <span key={l} className="block">{l}</span>)}
+          </p>
+          <p className="mt-4 text-xs text-white/70">🪙 {COIN_NOTE}</p>
+        </div>
+        <Skyline fade={false} slice className="block h-[22vh] min-h-[110px] w-full shrink-0 opacity-70" />
+      </Item>
+
+      <div className="flex flex-1 flex-col md:min-h-[100dvh] md:justify-center md:overflow-y-auto">
+      <div className="flex-1 px-6 pt-8 min-[380px]:px-7 min-[380px]:pt-10 md:mx-auto md:w-full md:max-w-md md:flex-none md:px-8 md:pt-0">
+        <Item className="flex flex-col items-center text-center md:hidden">
+          <motion.div animate={{ y: [0, -6, 0] }} transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}>
+            <Logo size={170} className="drop-shadow-[0_8px_16px_rgba(138,12,12,0.35)]" />
+          </motion.div>
+          <h1 className="mt-3 text-xl font-bold text-brand-dark min-[380px]:text-2xl">{APP_NAME}</h1>
+          <p className="font-script text-[28px] font-bold leading-tight text-bad min-[380px]:text-[32px]">{TAGLINE}</p>
+        </Item>
+        <Item className="hidden md:block">
+          <h2 className="text-3xl font-bold text-brand-dark">{isLogin ? 'Welcome back' : 'Create your account'}</h2>
+          <p className="mt-1 text-sm text-muted">{isLogin ? 'Login with your mobile number to play.' : 'Sign up and get free starting coins.'}</p>
+        </Item>
+
+        <motion.form variants={item} onSubmit={submit} className="mt-6 space-y-3">
+          <Field icon={<PhoneIcon />} inputMode="numeric" maxLength={10} placeholder="Mobile Number" aria-label="Mobile number" value={mobile}
+            onChange={(e) => setMobile(e.target.value.replace(/\D/g, ''))} required autoComplete="username" />
+          <AnimatePresence initial={false}>
+            {!isLogin && (
+              <motion.div key="name" {...reveal} className="overflow-hidden">
+                <Field icon={<UserIcon />} placeholder="Your Name" aria-label="Your name" value={name}
+                  onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={40} autoComplete="name" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <Field
+            icon={<LockIcon />} type={show ? 'text' : 'password'} placeholder={isLogin ? 'Password' : 'Password (min 6)'} aria-label="Password"
+            value={password} onChange={(e) => setPassword(e.target.value)} required minLength={isLogin ? 1 : 6}
+            autoComplete={isLogin ? 'current-password' : 'new-password'}
+            right={(
+              <motion.button type="button" whileTap={{ scale: 0.8 }} onClick={() => setShow((s) => !s)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-ink" aria-label={show ? 'Hide password' : 'Show password'}>
+                <EyeIcon off={show} />
+              </motion.button>
+            )}
+          />
+
+          <Button disabled={busy} className="!py-3.5 text-lg">{busy ? 'Please wait…' : isLogin ? 'Login' : 'Create Account'}</Button>
+
+          {isLogin && (
+            <button type="button" onClick={() => setForgot((f) => !f)} className="block w-full text-center text-sm font-medium text-ink">
+              Forgot Password?
+            </button>
+          )}
+          <AnimatePresence initial={false}>
+            {isLogin && forgot && (
+              <motion.p key="forgot" {...reveal} className="overflow-hidden rounded-btn bg-brand-light px-3 py-2.5 text-center text-xs text-brand-dark">
+                Password reset is done by support. Contact the admin with your registered mobile number.
+              </motion.p>
+            )}
+          </AnimatePresence>
+
+          <div className="flex items-center gap-3 py-1 text-xs font-semibold text-muted">
+            <span className="h-px flex-1 bg-line" />OR<span className="h-px flex-1 bg-line" />
+          </div>
+
+          <Button type="button" variant="outline" onClick={switchMode} className="!py-3 text-[15px]">
+            {isLogin ? 'New User? Register Here' : 'Already have an account? Login'}
+          </Button>
+
+          <AnimatePresence initial={false}>
+            {!isLogin && (
+              <motion.p key="coins" {...reveal} className="overflow-hidden rounded-btn bg-gold-light px-3 py-2.5 text-center text-xs font-medium text-[#6b4a00]">
+                🪙 {COIN_NOTE}. Coins cannot be bought or cashed out. You get free starting coins on signup.
+              </motion.p>
+            )}
+          </AnimatePresence>
+        </motion.form>
+      </div>
+
+      <Item className="relative mt-6 md:hidden">
+        <p className="relative z-10 -mb-6 ml-auto mr-8 w-fit -rotate-6 text-center font-script text-[26px] font-bold leading-7 text-brand min-[380px]:text-[30px] min-[380px]:leading-8">
+          {MOTTO.split('|').map((l) => <span key={l} className="block">{l}</span>)}
+        </p>
+        <Skyline className="block w-full" />
+      </Item>
+      <Footer className="bg-[#dbe7ff] !pt-1 md:bg-transparent md:!pt-6" />
+      </div>
+    </Page>
+  );
+}
