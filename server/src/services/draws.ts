@@ -65,11 +65,33 @@ export async function publicDraw(drawId: number, viewerId?: number) {
   };
 }
 
+/** Ticket numbers are random 6-digit values; max_tickets caps how many get sold. */
+export const TICKET_MIN = 100000;
+export const TICKET_MAX = 999999;
+const OFFER_SLOTS = 10;
+
+/**
+ * Free numbers shown on the Pick grid. Slot k walks its own fixed pseudo-random sequence
+ * sha256(seedHash:k:j), so the list is stable across polls and a sold number is replaced in the same slot.
+ */
+export function ticketOffers(seedHash: string, taken: Set<number>, count: number) {
+  const out: number[] = [];
+  for (let slot = 0; slot < count; slot++) {
+    for (let j = 0; ; j++) {
+      const n = TICKET_MIN + (parseInt(sha256(`${seedHash}:${slot}:${j}`).slice(0, 12), 16) % (TICKET_MAX - TICKET_MIN + 1));
+      if (!taken.has(n) && !out.includes(n)) { out.push(n); break; }
+    }
+  }
+  return out;
+}
+
 export async function takenNumbers(drawId: number) {
   const [d] = await db.select().from(draws).where(eq(draws.id, drawId));
   if (!d) throw notFound('Draw');
   const rows = await db.select({ n: tickets.ticketNo }).from(tickets).where(eq(tickets.drawId, drawId)).orderBy(asc(tickets.ticketNo));
-  return { drawId, maxTickets: d.maxTickets, taken: rows.map((r) => r.n) };
+  const taken = rows.map((r) => r.n);
+  const offers = ticketOffers(d.serverSeedHash, new Set(taken), Math.min(OFFER_SLOTS, Math.max(0, d.maxTickets - taken.length)));
+  return { drawId, maxTickets: d.maxTickets, taken, offers };
 }
 
 export async function verifyData(drawId: number) {

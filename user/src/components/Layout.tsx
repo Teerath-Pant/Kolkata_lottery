@@ -53,16 +53,18 @@ function DesktopNav() {
       initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 260, damping: 26 }}
       className="sticky top-0 z-30 hidden text-white shadow-card md:block" style={headerGradient}
     >
-      <div className="mx-auto flex max-w-6xl items-center gap-4 px-6 py-2 lg:gap-6">
-        <Link to="/" className="flex shrink-0 items-center gap-3">
-          <Logo size={56} />
+      {/* logo hard left, tabs centered, wallet + profile hard right */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-6 py-2">
+        <Link to="/" className="flex items-center gap-3 justify-self-start">
+          <Logo size={48} />
           <div className="hidden leading-tight lg:block">
             <div className="font-bold text-gold">{APP_NAME}</div>
-            <div className="font-script text-lg text-white/85">{TAGLINE}</div>
+            <div className="font-script text-base text-white/85">{TAGLINE}</div>
           </div>
         </Link>
-        <nav className="flex flex-1 justify-center gap-1">
-          {TABS.map((t) => (
+        <nav className="flex gap-1">
+          {/* "More" lives in the profile chip on desktop */}
+          {TABS.slice(0, -1).map((t) => (
             <NavLink key={t.to} to={t.to} end={t.end}>
               {({ isActive }) => (
                 <motion.span whileTap={{ scale: 0.94 }} className={`relative flex items-center gap-2 rounded-pill px-3 py-2 text-sm font-semibold transition-colors lg:px-4 ${isActive ? 'text-brand-dark' : 'text-white/85 hover:text-white'}`}>
@@ -74,10 +76,19 @@ function DesktopNav() {
             </NavLink>
           ))}
         </nav>
+        <div className="flex items-center gap-3 justify-self-end">
         <Link to="/wallet" className="flex shrink-0 items-center gap-2 rounded-pill bg-white/15 px-4 py-2 text-sm font-semibold transition-colors hover:bg-white/25">
           <Coin size={18} /><CountUp value={balance} />
         </Link>
-        <span className="hidden max-w-[10rem] truncate text-sm text-white/80 xl:block">Hi {user?.name}</span>
+        <NavLink to="/more" title="Profile & menu" className="shrink-0">
+          {({ isActive }) => (
+            <span className={`flex items-center gap-2 rounded-pill p-1 text-sm font-semibold transition-colors lg:pr-4 ${isActive ? 'bg-white text-brand-dark' : 'bg-white/15 hover:bg-white/25'}`}>
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-gold font-bold text-brand-dark">{user?.name.charAt(0).toUpperCase()}</span>
+              <span className="hidden max-w-[8rem] truncate lg:block">{user?.name}</span>
+            </span>
+          )}
+        </NavLink>
+        </div>
       </div>
     </motion.header>
   );

@@ -14,9 +14,9 @@ STACK (fixed, do not change)
 GAME RULES
 1. Three packages: 50, 100, 200 coins. Each package has its own draws, its own ticket pool, and its own prize. Prize is configurable per package (fixed amount or percent of pool). Package values come from the database, never hardcoded in the UI.
 2. A user buys a ticket for a draw and gets exactly ONE ticket per draw (no quantity selector).
-3. Ticket numbers are unique per draw (4-digit format, 0001 to max_tickets). At purchase the user chooses:
+3. Ticket numbers are unique per draw, random 6-digit (100000-999999); max_tickets caps how many are sold. At purchase the user chooses:
    a) "Random Number": server assigns a free number, or
-   b) "Pick Number": UI shows the grid of numbers, taken ones disabled, user picks a free one.
+   b) "Pick Number": UI shows 10 free numbers; when one sells it is replaced by a new one. User picks one.
 4. Each draw has a fixed draw_time. At that time the system announces the winning ticket number, credits the prize coins to the winner, and closes the draw. The next draw for that package opens automatically.
 5. Draw mode is set per draw by admin: RANDOM (server CSPRNG) or ADMIN_SELECTED (admin picks the winning ticket before draw_time). The mode MUST be shown publicly on the draw screen as a badge: "Random draw" or "Admin-selected winner". Never hide it.
 6. If no tickets sold, skip the draw and open the next. If tickets sold are below package min_tickets, cancel the draw and refund everyone.

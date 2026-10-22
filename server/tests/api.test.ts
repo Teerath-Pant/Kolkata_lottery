@@ -69,17 +69,24 @@ describe('http api', () => {
     const draw = (await call('/packages')).body.packages[0].currentDraw;
     expect(a.user && (await call('/me/wallet', { token: a.accessToken })).body.balance).toBe(500);
 
-    expect((await call(`/draws/${draw.id}/buy`, { token: a.accessToken, body: { ticketNo: 5, random: true } })).status).toBe(400);
-    const ok = await call(`/draws/${draw.id}/buy`, { token: a.accessToken, body: { ticketNo: 5 } });
+    expect((await call(`/draws/${draw.id}/buy`, { token: a.accessToken, body: { ticketNo: 100005, random: true } })).status).toBe(400);
+    const ok = await call(`/draws/${draw.id}/buy`, { token: a.accessToken, body: { ticketNo: 100005 } });
     expect(ok.status).toBe(201);
     expect(ok.body.balance).toBe(450);
     expect((await call(`/draws/${draw.id}/buy`, { token: a.accessToken, body: { random: true } })).body.error.code).toBe('ALREADY_HAS_TICKET');
-    expect((await call(`/draws/${draw.id}/buy`, { token: b.accessToken, body: { ticketNo: 5 } })).body.error.code).toBe('TICKET_TAKEN');
+    expect((await call(`/draws/${draw.id}/buy`, { token: b.accessToken, body: { ticketNo: 100005 } })).body.error.code).toBe('TICKET_TAKEN');
     const rnd = await call(`/draws/${draw.id}/buy`, { token: b.accessToken, body: { random: true }, headers: { 'Idempotency-Key': 'abcdefgh-1' } });
     const again = await call(`/draws/${draw.id}/buy`, { token: b.accessToken, body: { random: true }, headers: { 'Idempotency-Key': 'abcdefgh-1' } });
     expect(again.body).toEqual(rnd.body);
 
-    expect((await call(`/draws/${draw.id}/tickets`)).body.taken).toContain(5);
+    const t1 = (await call(`/draws/${draw.id}/tickets`)).body;
+    expect(t1.taken).toContain(100005);
+    expect(t1.offers).toHaveLength(10);
+    expect(t1.offers.every((n: number) => n >= 100000 && n <= 999999 && !t1.taken.includes(n))).toBe(true);
+    const c = await register('9000000005');
+    await call(`/draws/${draw.id}/buy`, { token: c.accessToken, body: { ticketNo: t1.offers[3] } });
+    const t2 = (await call(`/draws/${draw.id}/tickets`)).body.offers;
+    expect(t2.filter((n: number, i: number) => n !== t1.offers[i])).toEqual([t2[3]]); // only the sold slot got a new number
     const mine = (await call('/me/tickets', { token: a.accessToken })).body.tickets;
     expect(mine).toHaveLength(1);
     const w = (await call('/me/wallet', { token: a.accessToken })).body;
@@ -87,7 +94,7 @@ describe('http api', () => {
     expect(w.recent.map((r: any) => r.type)).toEqual(['ticket_purchase', 'signup_bonus']);
     expect((await call('/me/daily-claim', { token: a.accessToken, method: 'POST' })).status).toBe(200);
     expect((await call('/me/daily-claim', { token: a.accessToken, method: 'POST' })).status).toBe(429);
-    expect((await call(`/draws/${draw.id}`, { token: a.accessToken })).body.myTicketNo).toBe(5);
+    expect((await call(`/draws/${draw.id}`, { token: a.accessToken })).body.myTicketNo).toBe(100005);
   });
 
   it('admin: role guard, mode/select/adjust, audit log; public sees the mode', async () => {
@@ -97,7 +104,7 @@ describe('http api', () => {
     expect(admin.user.role).toBe('admin');
     const draw = (await call('/packages')).body.packages[0].currentDraw;
     expect((await call(`/admin/draws/${draw.id}/mode`, { token: admin.accessToken, body: { mode: 'admin_selected' } })).status).toBe(200);
-    expect((await call(`/admin/draws/${draw.id}/select-winner`, { token: admin.accessToken, body: { ticketNo: 3 } })).status).toBe(200);
+    expect((await call(`/admin/draws/${draw.id}/select-winner`, { token: admin.accessToken, body: { ticketNo: 100003 } })).status).toBe(200);
     expect((await call(`/draws/${draw.id}`)).body.mode).toBe('admin_selected');
     expect(JSON.stringify((await call(`/draws/${draw.id}`)).body)).not.toContain('selectedTicketNo');
     const adj = await call(`/admin/users/${user.user.id}/adjust-coins`, { token: admin.accessToken, body: { amount: 25, reason: 'support gift' } });

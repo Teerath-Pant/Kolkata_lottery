@@ -37,6 +37,7 @@ function DrawCard({ d }: { d: AdminDraw }) {
   const editable = d.status === 'open' && Date.parse(d.drawTime) > Date.now();
   const mode = useMutation({ mutationFn: (m: DrawMode) => api(`/admin/draws/${d.id}/mode`, { body: { mode: m } }), ...act });
   const pick = useMutation({ mutationFn: () => api(`/admin/draws/${d.id}/select-winner`, { body: { ticketNo: Number(no) } }), ...act, onSuccess: () => { act.onSuccess(); setNo(''); } });
+  const sold = useQuery({ queryKey: ['taken', d.id], queryFn: () => api<{ taken: number[] }>(`/draws/${d.id}/tickets`), enabled: editable, refetchInterval: 8000 });
 
   return (
     <Card>
@@ -59,7 +60,8 @@ function DrawCard({ d }: { d: AdminDraw }) {
               className={`flex-1 rounded-btn border py-2 text-xs font-semibold ${d.mode === 'admin_selected' ? 'border-gold-dark bg-gold' : 'border-line'}`}>Admin-selected</motion.button>
           </div>
           <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); pick.mutate(); }}>
-            <input className={field} inputMode="numeric" placeholder={`Winning ticket 1-${d.maxTickets}`} value={no} onChange={(e) => setNo(e.target.value.replace(/\D/g, ''))} />
+            <input className={field} inputMode="numeric" maxLength={6} list={`sold-${d.id}`} placeholder="Winning ticket (6 digits)" value={no} onChange={(e) => setNo(e.target.value.replace(/\D/g, ''))} />
+            <datalist id={`sold-${d.id}`}>{sold.data?.taken.map((n) => <option key={n} value={n} />)}</datalist>
             <div className="w-24"><Button disabled={!no || pick.isPending}>Set</Button></div>
           </form>
           <p className="text-[11px] text-muted">Used only in Admin-selected mode. If that ticket is unsold at draw time, a random winner is drawn and logged. The mode is shown publicly to players.</p>

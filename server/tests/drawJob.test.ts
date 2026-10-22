@@ -69,11 +69,11 @@ describe('draw job', () => {
     const admin = await makeUser(0);
     const { draw } = await makeDraw({ min: 0, mode: 'admin_selected', drawTime: new Date(Date.now() + 3600_000) });
     const sold = await sellTickets(draw.id, 50, 5);
-    await selectWinner(admin.id, draw.id, 4);
+    await selectWinner(admin.id, draw.id, 100004);
     await db.update(draws).set({ drawTime: past() }).where(eq(draws.id, draw.id));
     await executeDraw(draw.id);
     const [d] = await db.select().from(draws).where(eq(draws.id, draw.id));
-    expect(d.winningTicketNo).toBe(4);
+    expect(d.winningTicketNo).toBe(100004);
     expect(d.winMethod).toBe('admin_selected');
     expect(d.winnerUserId).toBe(sold[3].userId);
   });
@@ -91,14 +91,14 @@ describe('draw job', () => {
     const admin = await makeUser(0);
     const { draw } = await makeDraw({ drawTime: past() });
     await expect(setMode(admin.id, draw.id, 'admin_selected')).rejects.toMatchObject({ code: 'DRAW_LOCKED' });
-    await expect(selectWinner(admin.id, draw.id, 1)).rejects.toMatchObject({ code: 'DRAW_LOCKED' });
+    await expect(selectWinner(admin.id, draw.id, 100001)).rejects.toMatchObject({ code: 'DRAW_LOCKED' });
   });
 
   it('admin edits are audited', async () => {
     const admin = await makeUser(0);
     const { draw } = await makeDraw({});
     await setMode(admin.id, draw.id, 'admin_selected', '1.2.3.4');
-    await selectWinner(admin.id, draw.id, 9, '1.2.3.4');
+    await selectWinner(admin.id, draw.id, 100009, '1.2.3.4');
     const log = await db.select().from(adminAuditLog);
     expect(log.map((l) => l.action)).toEqual(['set_mode', 'select_winner']);
     expect(log[0].ip).toBe('1.2.3.4');
