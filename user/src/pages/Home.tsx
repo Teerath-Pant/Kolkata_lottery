@@ -1,59 +1,151 @@
-import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
-import { CountUp, Item, item } from '../components/motion';
-import { PackageTile } from '../components/PackageCard';
-import { Coin, Countdown, ErrorBox, Spinner } from '../components/ui';
-import { APP_NAME } from '../config';
-import { Logo } from '../components/Logo';
-import { api } from '../lib/api';
-import { useAuth } from '../lib/auth';
-import type { Pkg } from '../lib/types';
-import { headerGradient } from '../theme';
+import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { motion } from "framer-motion";
+import { Item, item } from "../components/motion";
+import { Countdown, ErrorBox, Spinner } from "../components/ui";
+import { APP_NAME } from "../config";
+import { Logo } from "../components/Logo";
+import { api } from "../lib/api";
+import type { Pkg } from "../lib/types";
+import { headerGradient } from "../theme";
 
 const MLink = motion.create(Link);
 
+// Tile ke colours (position ke hisaab se)
+const tileColors = [
+  "from-red-500 to-red-700",
+  "from-blue-500 to-blue-700",
+  "from-green-500 to-green-700",
+  "from-purple-500 to-purple-700",
+  "from-pink-500 to-fuchsia-700",
+];
+
+// Tile ke neeche ka label (position ke hisaab se)
+const tileLabels = [
+  "Grand Prize",
+  "Mega Prize",
+  "Special Prize",
+  "Special Prize",
+  "Super Prize",
+];
+
+// Tiles ka sequence (Name admin mein bilkul aise hi likha hona chahiye)
+const ORDER = ["1 करोड़", "2 करोड़", "5 लाख", "10 लाख", "20 लाख"];
+const rank = (name: string) => {
+  const i = ORDER.indexOf(name.trim());
+  return i === -1 ? 99 : i;
+};
+
 export function Home() {
-  const { user, balance } = useAuth();
   const q = useQuery({
-    queryKey: ['packages'],
-    queryFn: () => api<{ packages: Pkg[]; serverTime: string }>('/packages'),
+    queryKey: ["packages"],
+    queryFn: () => api<{ packages: Pkg[]; serverTime: string }>("/packages"),
     refetchInterval: 5000,
   });
-  const next = q.data?.packages.map((p) => p.currentDraw).filter(Boolean).sort((a, b) => +new Date(a!.drawTime) - +new Date(b!.drawTime))[0];
+  const next = q.data?.packages
+    .map((p) => p.currentDraw)
+    .filter(Boolean)
+    .sort((a, b) => +new Date(a!.drawTime) - +new Date(b!.drawTime))[0];
+  const sorted = q.data
+    ? [...q.data.packages].sort((a, b) => rank(a.name) - rank(b.name))
+    : [];
 
   return (
     <div>
-      <header className="flex items-center gap-3 px-4 py-3 text-white md:hidden" style={headerGradient}>
-        <Logo size={48} className="shrink-0" />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-bold text-gold">{APP_NAME}</div>
-          <div className="truncate text-[11px] text-white/70">Hi {user?.name}</div>
+      {/* Mobile header (PC pe Layout ka nav dikhta hai, isliye yahan md:hidden) */}
+      <header
+        className="grid grid-cols-3 items-center px-3 py-2 text-white md:hidden"
+        style={headerGradient}
+      >
+        <div className="flex justify-start">
+          <Link
+            to="/more"
+            aria-label="Menu"
+            className="p-2 text-2xl leading-none"
+          >
+            ☰
+          </Link>
         </div>
-        <Link to="/wallet" className="rounded-pill bg-white/15 px-3 py-1.5 text-sm"><span className="inline-flex items-center gap-1 font-semibold"><Coin /><CountUp value={balance} /></span></Link>
+        <div className="flex justify-center">
+          <Logo size={64} className="shrink-0" />
+        </div>
+        <div className="flex justify-end">
+          <button
+            type="button"
+            aria-label="Notifications"
+            className="p-2 text-2xl leading-none"
+          >
+            🔔
+          </button>
+        </div>
       </header>
 
-      <div className="space-y-4 p-4 md:mx-auto md:max-w-5xl md:space-y-6 md:px-6 md:py-8">
-        <Item className="relative overflow-hidden rounded-card bg-gradient-to-br from-gold-light to-white p-4 shadow-card md:p-8">
-          <motion.span animate={{ opacity: [1, 0.45, 1] }} transition={{ repeat: Infinity, duration: 1.6 }} className="absolute right-3 top-3 rounded-pill bg-bad px-2 py-0.5 text-[10px] font-bold uppercase text-white">● Live</motion.span>
-          <div className="hidden text-lg font-semibold text-ink md:block">Welcome back, {user?.name}</div>
-          <div className="text-xs font-medium text-muted md:text-sm">Next draw closes in</div>
-          <div className="text-3xl font-extrabold text-brand-dark md:text-5xl">
-            {next ? <Countdown target={next.drawTime} serverTime={next.serverTime} /> : '--:--:--'}
+      <div className="space-y-3 p-3 md:mx-auto md:max-w-5xl md:space-y-5 md:px-6 md:py-8">
+        {/* Banner + countdown */}
+
+
+              {/* Ek curved box: andar banner + lottery ticket */}
+        <Item>
+          <div className="mx-auto w-full overflow-hidden rounded-card bg-white shadow-card md:max-w-3xl">
+            <img
+              src="/banner.webp"
+              alt="Banner"
+              className="block h-auto w-full object-contain"
+            />
+
+            <div className="relative px-2 pb-2">
+              <img
+                src="/lottery.webp"
+                alt="Lucky Ticket"
+                className="block h-auto w-full rounded-lg object-contain"
+              />
+              <motion.span
+                animate={{ opacity: [1, 0.55, 1] }}
+                transition={{ repeat: Infinity, duration: 1.6 }}
+                className="absolute right-4 top-2 rounded-full bg-bad px-3 py-1.5 text-center text-[10px] font-extrabold uppercase leading-tight text-white shadow-lg md:right-6 md:top-3 md:text-xs"
+              >
+                Live<br />Draw
+              </motion.span>
+            </div>
           </div>
-          <div className="text-xs italic text-muted">Pick your lucky number. One ticket per draw.</div>
         </Item>
 
-        <Item className="flex items-center justify-between">
-          <h2 className="font-semibold md:text-xl">Choose your draw</h2>
-          <Link to="/packages" className="text-sm font-semibold text-brand">View all</Link>
-        </Item>
+        {/* Prize tiles */}
+        {q.isLoading ? (
+          <Spinner />
+        ) : q.error ? (
+          <ErrorBox error={q.error} retry={() => q.refetch()} />
+        ) : (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-5">
+            {sorted.map((p, i) => (
+              <MLink
+                key={p.id}
+              to={p.currentDraw ? `/draw/${p.currentDraw.id}` : '/packages'}
+                variants={item}
+                whileTap={{ scale: 0.96 }}
+                whileHover={{ y: -3 }}
+                className={`flex min-h-[120px] flex-col items-center justify-center rounded-card bg-gradient-to-br ${tileColors[i % tileColors.length]} p-3 text-center text-white shadow-card md:min-h-[160px]`}
+              >
+                <span className="text-2xl md:text-4xl">🏆</span>
+                <span className="text-3xl font-extrabold leading-tight md:text-4xl">
+                  {p.name}
+                </span>
+                <span className="text-sm font-medium text-white/90 md:text-base">
+                  {tileLabels[i] ?? "Prize"}
+                </span>
+              </MLink>
+            ))}
 
-        {q.isLoading ? <Spinner /> : q.error ? <ErrorBox error={q.error} retry={() => q.refetch()} /> : (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-5">
-            {q.data!.packages.map((p) => <PackageTile key={p.id} pkg={p} />)}
-            <MLink to="/results" variants={item} whileTap={{ scale: 0.96 }} whileHover={{ y: -3 }} className="flex flex-col items-center justify-center rounded-card bg-gradient-to-br from-gold to-gold-dark p-3 text-center font-bold text-[#4a2e00] shadow-card">
-              <span className="text-3xl">📋</span>All Results<span className="text-xs font-medium">View all</span>
+            <MLink
+              to="/results"
+              variants={item}
+              whileTap={{ scale: 0.96 }}
+              whileHover={{ y: -3 }}
+              className="flex min-h-[120px] flex-col items-center justify-center rounded-card bg-gradient-to-br from-gold to-gold-dark p-3 text-center font-bold text-[#4a2e00] shadow-card md:min-h-[160px]"
+            >
+              <span className="text-3xl md:text-4xl">📋</span>
+              <span className="text-xl">All Draws</span>
+              <span className="text-sm font-medium">View All</span>
             </MLink>
           </div>
         )}

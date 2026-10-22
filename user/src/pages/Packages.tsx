@@ -4,14 +4,22 @@ import { ErrorBox, PageHeader, Spinner } from '../components/ui';
 import { api } from '../lib/api';
 import type { Pkg } from '../lib/types';
 
+// Sequence (Name admin mein bilkul aise hi hona chahiye)
+const ORDER = ['1 करोड़', '2 करोड़', '5 लाख', '10 लाख', '20 लाख'];
+const rank = (name: string) => {
+  const i = ORDER.indexOf(name.trim());
+  return i === -1 ? 99 : i;
+};
+
 export function Packages() {
   const q = useQuery({ queryKey: ['packages'], queryFn: () => api<{ packages: Pkg[] }>('/packages'), refetchInterval: 5000 });
+  const sorted = q.data ? [...q.data.packages].sort((a, b) => rank(a.name) - rank(b.name)) : [];
   return (
     <div>
       <PageHeader title="Select Prize Amount" back="/" />
-      <div className="grid gap-3 p-4 md:mx-auto md:max-w-5xl md:grid-cols-2 md:gap-5 md:px-6 lg:grid-cols-3">
+      <div className="mx-auto grid max-w-md gap-3 p-4">
         {q.isLoading ? <Spinner /> : q.error ? <ErrorBox error={q.error} retry={() => q.refetch()} /> :
-          q.data!.packages.map((p) => <PackageRow key={p.id} pkg={p} />)}
+          sorted.map((p, i) => <PackageRow key={p.id} pkg={p} index={i} />)}
       </div>
     </div>
   );
