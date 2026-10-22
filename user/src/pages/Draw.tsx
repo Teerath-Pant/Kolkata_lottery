@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Item } from '../components/motion';
 import { Celebration } from '../components/Celebration';
 import { prizeText } from '../components/PackageCard';
 import { useToast } from '../components/Toast';
@@ -21,6 +19,28 @@ const HOW = [
   'If too few tickets are sold, the draw is cancelled and everyone is refunded.',
 ];
 
+// Sequence (Name admin mein bilkul aise hi hona chahiye)
+const ORDER = ['1 करोड़', '2 करोड़', '5 लाख', '10 लाख', '20 लाख'];
+const LABELS = ['GRAND PRIZE', 'MEGA PRIZE', 'SPECIAL PRIZE', 'SPECIAL PRIZE', 'SUPER PRIZE'];
+// [light, dark, button, deep shadow]
+const COLORS: [string, string, string, string][] = [
+  ['#ef4444', '#7f1d1d', '#dc2626', '#7f1d1d'],
+  ['#3b82f6', '#1e3a8a', '#2563eb', '#1e3a8a'],
+  ['#22c55e', '#14532d', '#16a34a', '#14532d'],
+  ['#a855f7', '#4c1d95', '#7c3aed', '#4c1d95'],
+  ['#ec4899', '#831843', '#db2777', '#831843'],
+];
+
+// 3D text: gold gradient + layered shadow
+const bigText: React.CSSProperties = {
+  background: 'linear-gradient(180deg, #fff3b0 0%, #ffd34d 45%, #e8a200 100%)',
+  WebkitBackgroundClip: 'text',
+  backgroundClip: 'text',
+  color: 'transparent',
+  WebkitTextStroke: '1px rgba(120,60,0,0.55)',
+  filter: 'drop-shadow(0 2px 0 #9a5b00) drop-shadow(0 4px 0 #7a4400) drop-shadow(0 8px 6px rgba(0,0,0,0.45))',
+};
+
 export function DrawPage() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -33,7 +53,6 @@ export function DrawPage() {
   const q = useQuery({
     queryKey: ['draw', id],
     queryFn: () => api<Draw>(`/draws/${id}`),
-    // poll fast around draw time so the winner appears within a few seconds
     refetchInterval: (query) => {
       const d = query.state.data;
       if (!d || d.status === 'completed' || d.status === 'cancelled') return false;
@@ -60,93 +79,122 @@ export function DrawPage() {
   if (q.error || !d) return <><PageHeader title="Draw" back="/" /><ErrorBox error={q.error} retry={() => q.refetch()} /></>;
 
   const open = d.status === 'open';
+  const idx = ORDER.indexOf(d.packageName.trim());
+  const col = idx >= 0 ? COLORS[idx] : null;
+  const label = idx >= 0 ? LABELS[idx] : (prizeText(d) ?? 'Grand prize').toUpperCase();
+  const pageStyle = col
+    ? { background: `linear-gradient(180deg, ${col[0]}, ${col[1]})` }
+    : themeGradient(d.theme);
+  const btnStyle: React.CSSProperties | undefined = col
+    ? {
+        background: `linear-gradient(180deg, ${col[0]}, ${col[2]})`,
+        boxShadow: `0 5px 0 ${col[3]}, 0 10px 14px rgba(0,0,0,0.3), inset 0 2px 0 rgba(255,255,255,0.35)`,
+      }
+    : undefined;
+  // Card: deep gradient + thick gold border + inner glow + outer depth
+  const cardStyle: React.CSSProperties = {
+    background: col
+      ? `radial-gradient(circle at 50% 0%, ${col[0]} 0%, ${col[1]} 75%)`
+      : 'rgba(0,0,0,0.25)',
+    border: '5px solid #f5c542',
+    boxShadow:
+      '0 0 0 2px #8a5a00, 0 10px 0 #6b4300, 0 18px 24px rgba(0,0,0,0.45), inset 0 0 28px rgba(255,220,120,0.35), inset 0 3px 0 rgba(255,255,255,0.35)',
+  };
+  const whiteCard: React.CSSProperties = {
+    boxShadow: '0 6px 0 rgba(0,0,0,0.18), 0 12px 16px rgba(0,0,0,0.25), inset 0 2px 0 #fff',
+  };
+
   const goNext = async () => {
     try { nav(`/draw/${(await api<Draw>(`/packages/${d.packageId}/current-draw`)).id}`, { replace: true }); }
     catch (e) { toast(e instanceof Error ? e.message : 'No open draw yet', 'error'); }
   };
 
   return (
-    <div className="min-h-screen" style={themeGradient(d.theme)}>
+    <div className="min-h-screen" style={pageStyle}>
       <PageHeader title={`${d.packageName} Draw`} back="/" keep style={{ background: 'transparent' }} />
       {party && <Celebration ticketNo={d.winningTicketNo!} prize={d.prizeAmount} onClose={() => setParty(false)} />}
 
-      <div className="px-4 pb-6 md:mx-auto md:grid md:max-w-5xl md:grid-cols-2 md:items-start md:gap-6 md:px-6 md:pb-12">
-        <div className="space-y-4">
-        <Item className="relative rounded-card border-4 border-gold bg-black/20 p-4 text-center text-white shadow-glow min-[380px]:p-5 md:py-10">
-          <motion.div animate={{ y: [0, -5, 0], rotate: [-4, 4, -4] }} transition={{ repeat: Infinity, duration: 2.6 }} className="absolute -top-6 left-1/2 -ml-5 text-4xl" aria-hidden>👑</motion.div>
-          <div className="mt-2 text-xs font-semibold uppercase tracking-widest text-gold">{prizeText(d) ?? 'Grand prize'}</div>
-          <div className="text-3xl font-extrabold min-[380px]:text-4xl md:text-5xl"><Coins n={d.prizeAmount} size={30} className="font-extrabold" /></div>
+      <div className="mx-auto max-w-md space-y-6 px-4 pb-10 pt-8">
+        {/* 3D prize card */}
+        <div className="relative rounded-card p-4 pb-5 pt-8 text-center text-white" style={cardStyle}>
+          <div className="absolute -top-8 left-1/2 -ml-7 text-6xl" style={{ filter: 'drop-shadow(0 4px 3px rgba(0,0,0,0.5))' }} aria-hidden>👑</div>
+          <div className="text-6xl font-extrabold leading-tight" style={bigText}>{d.packageName}</div>
+          <div
+            className="mt-2 inline-block rounded-btn px-5 py-1 text-lg font-extrabold tracking-wide"
+            style={{
+              background: 'linear-gradient(180deg, rgba(0,0,0,0.15), rgba(0,0,0,0.45))',
+              border: '2px solid #f5c542',
+              boxShadow: '0 3px 0 #7a4400, inset 0 1px 0 rgba(255,255,255,0.3)',
+              color: '#fff3b0',
+              textShadow: '0 2px 2px rgba(0,0,0,0.5)',
+            }}
+          >
+            {label}
+          </div>
+          <div className="mt-2 text-sm text-white/90">Prize: {d.prizeType === 'fixed' ? <Coins n={d.prizeValue} size={14} /> : <>{d.prizeValue}% of pool (<Coins n={d.prizeAmount} size={14} />)</>}</div>
           <div className="mt-2"><ModeBadge mode={d.mode} /></div>
-          <div className="mt-3 text-xs text-white/80">Draw date &amp; time</div>
-          <div className="font-semibold">{fmtDateTime(d.drawTime)}</div>
-        </Item>
-
-        {open && (
-          <Item className="rounded-card bg-white/95 p-4 text-center shadow-card">
-            <div className="text-xs text-muted">Draw closes in</div>
-            <div className="text-3xl font-extrabold text-brand-dark"><Countdown target={d.drawTime} serverTime={d.serverTime} /></div>
-            <div className="text-xs text-muted">{d.soldCount}/{d.maxTickets} tickets sold</div>
-            <div className="mt-2 h-2 overflow-hidden rounded-pill bg-brand-light">
-              <motion.div className="h-full rounded-pill bg-gradient-to-r from-brand to-bad" initial={{ width: 0 }} animate={{ width: `${Math.min(100, (d.soldCount / d.maxTickets) * 100)}%` }} transition={{ duration: 0.8, ease: 'easeOut' }} />
+          <div className="mt-3 text-xs text-white/80">Draw Date &amp; Time</div>
+          <div className="text-lg font-semibold" style={{ textShadow: '0 2px 2px rgba(0,0,0,0.4)' }}>{fmtDateTime(d.drawTime)}</div>
+          {open && (
+            <div className="mt-1 text-xs text-white/85">
+              ⏱ <Countdown target={d.drawTime} serverTime={d.serverTime} /> · {d.soldCount}/{d.maxTickets} sold
             </div>
-          </Item>
-        )}
+          )}
+        </div>
 
         {d.status === 'completed' && (
-          <Item className="rounded-card bg-white p-4 text-center shadow-card">
+          <div className="rounded-card bg-white p-4 text-center" style={whiteCard}>
             <div className="text-xs font-semibold uppercase text-muted">Winning ticket</div>
-            <motion.div initial={{ scale: 0.3, rotate: -10, opacity: 0 }} animate={{ scale: 1, rotate: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 260, damping: 12, delay: 0.2 }}
-              className="text-4xl font-extrabold tracking-widest text-bad">#{ticketLabel(d.winningTicketNo!)}</motion.div>
+            <div className="text-4xl font-extrabold tracking-widest text-bad">#{ticketLabel(d.winningTicketNo!)}</div>
             <div className="text-sm text-muted">Winner {d.winnerName} · <Coins n={d.prizeAmount} /></div>
             {d.iWon && <div className="mt-2 rounded-btn bg-gold-light py-2 font-bold text-[#6b4a00]">🎉 That is your ticket! Prize credited.</div>}
             <Link to={`/verify/${d.id}`} className="mt-2 inline-block text-sm font-semibold text-brand underline">Verify this result</Link>
-          </Item>
+          </div>
         )}
         {d.status === 'cancelled' && (
-          <Item className="rounded-card bg-white p-4 text-center text-sm shadow-card">
+          <div className="rounded-card bg-white p-4 text-center text-sm" style={whiteCard}>
             Draw cancelled (not enough tickets sold). Tickets were refunded.
-          </Item>
+          </div>
         )}
+
+        {/* Ticket price + Book Now */}
+                <div className="rounded-card bg-white p-4" style={whiteCard}>
+          <div className="text-center text-sm font-semibold" style={{ color: col ? col[1] : undefined }}>Ticket Price</div>
+          <div className="mb-3 text-center text-3xl font-extrabold" style={{ color: col ? col[1] : undefined }}>
+            <Coins n={d.ticketPrice} size={26} />
+          </div>
+          {open && (d.myTicketNo
+            ? <div className="rounded-btn bg-brand-light py-3 text-center font-bold text-brand-dark">Aapke paas is draw ka ticket #{ticketLabel(d.myTicketNo)} hai.</div>
+            : btnStyle
+              ? <button onClick={() => nav(`/book/${d.id}`)} style={btnStyle} className="w-full rounded-btn py-3 text-lg font-bold text-white active:translate-y-1">Book Now</button>
+              : <Button onClick={() => nav(`/book/${d.id}`)}>Book Now</Button>)}
+          {!open && <Button onClick={goNext}>Go to next draw</Button>}
         </div>
 
-        <div className="mt-4 space-y-4 md:mt-0">
+        {/* Prize Details / Past Results / How to Play */}
+        <div className="grid grid-cols-3 gap-2 rounded-card bg-white p-2 text-center text-[11px] font-medium" style={whiteCard}>
+          <button onClick={() => setPanel(panel === 'prize' ? null : 'prize')} className="rounded-btn py-2"><div className="text-xl">🏅</div>Prize Details</button>
+          <Link to={`/results?packageId=${d.packageId}`} className="block rounded-btn py-2"><div className="text-xl">📋</div>Past Results</Link>
+          <button onClick={() => setPanel(panel === 'how' ? null : 'how')} className="rounded-btn py-2"><div className="text-xl">❓</div>How to Play</button>
+        </div>
 
-        <Item className="rounded-card bg-white p-3 shadow-card">
-          <div className="text-center text-xs text-muted">Ticket price</div>
-          <div className="mb-2 text-center text-2xl font-bold"><Coins n={d.ticketPrice} size={22} /></div>
-          {open && (d.myTicketNo
-            ? <div className="rounded-btn bg-brand-light py-3 text-center font-bold text-brand-dark">Your ticket: #{ticketLabel(d.myTicketNo)}</div>
-            : <Button onClick={() => nav(`/book/${d.id}`)}>Book Now</Button>)}
-          {!open && <Button onClick={goNext}>Go to next draw</Button>}
-        </Item>
-
-        <Item className="rounded-card bg-black/25 p-3 text-[11px] text-white/90">
-          <div className="font-semibold">Provably fair commitment (SHA-256 of server seed)</div>
-          <button className="mt-1 block w-full break-all text-left font-mono" onClick={() => { navigator.clipboard?.writeText(d.serverSeedHash); toast('Hash copied', 'success'); }}>
-            {d.serverSeedHash}
-          </button>
-          {d.serverSeed && <div className="mt-1 break-all"><span className="font-semibold">Revealed seed:</span> <span className="font-mono">{d.serverSeed}</span></div>}
-        </Item>
-
-        <Item className="grid grid-cols-3 gap-2 rounded-card bg-white p-2 text-center text-[11px] font-medium shadow-card">
-          <motion.button whileTap={{ scale: 0.9 }} onClick={() => setPanel(panel === 'prize' ? null : 'prize')} className="rounded-btn py-2"><div className="text-xl">🏅</div>Prize Details</motion.button>
-          <motion.div whileTap={{ scale: 0.9 }}><Link to={`/results?packageId=${d.packageId}`} className="block rounded-btn py-2"><div className="text-xl">📋</div>Past Results</Link></motion.div>
-          <motion.button whileTap={{ scale: 0.9 }} onClick={() => setPanel(panel === 'how' ? null : 'how')} className="rounded-btn py-2"><div className="text-xl">❓</div>How to Play</motion.button>
-        </Item>
-
-        <AnimatePresence mode="wait" initial={false}>
         {panel === 'prize' && (
-          <motion.div key="prize" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden rounded-card bg-white p-4 text-sm shadow-card">
+          <div className="space-y-1 rounded-card bg-white p-4 text-sm" style={whiteCard}>
             <p><b>Prize:</b> {d.prizeType === 'fixed' ? <Coins n={d.prizeValue} /> : `${d.prizeValue}% of the ticket pool (now `}{d.prizeType !== 'fixed' && <><Coins n={d.prizeAmount} />)</>}</p>
             <p><b>Tickets:</b> max {d.maxTickets}, minimum {d.minTickets} needed or the draw is cancelled &amp; refunded.</p>
             <p><b>Winner selection:</b> {d.mode === 'random' ? 'Random (HMAC of a pre-committed server seed).' : 'Chosen by the admin before draw time.'}</p>
-          </motion.div>
+            <div className="pt-2 text-[11px] text-muted">
+              <div className="font-semibold">Provably fair commitment (SHA-256 of server seed)</div>
+              <button className="mt-1 block w-full break-all text-left font-mono" onClick={() => { navigator.clipboard?.writeText(d.serverSeedHash); toast('Hash copied', 'success'); }}>
+                {d.serverSeedHash}
+              </button>
+              {d.serverSeed && <div className="mt-1 break-all"><span className="font-semibold">Revealed seed:</span> <span className="font-mono">{d.serverSeed}</span></div>}
+            </div>
+          </div>
         )}
         {panel === 'how' && (
-          <motion.ol key="how" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="list-decimal space-y-1 overflow-hidden rounded-card bg-white p-4 pl-8 text-sm shadow-card">{HOW.map((h) => <li key={h}>{h}</li>)}</motion.ol>
+          <ol className="list-decimal space-y-1 rounded-card bg-white p-4 pl-8 text-sm" style={whiteCard}>{HOW.map((h) => <li key={h}>{h}</li>)}</ol>
         )}
-        </AnimatePresence>
-        </div>
       </div>
     </div>
   );
