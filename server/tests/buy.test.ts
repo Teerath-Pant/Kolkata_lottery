@@ -14,7 +14,7 @@ describe('buy ticket transaction', () => {
   it('race: 20 users grab the same number, exactly one wins and only they pay', async () => {
     const { draw } = await makeDraw({ price: 50 });
     const users = await Promise.all(Array.from({ length: 20 }, () => makeUser(1000)));
-    const results = await Promise.allSettled(users.map((u) => buyTicket(u.id, draw.id, { ticketNo: 7 })));
+    const results = await Promise.allSettled(users.map((u) => buyTicket(u.id, draw.id, { ticketNo: 123456 })));
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter((r) => code(r) === 'TICKET_TAKEN')).toHaveLength(19);
     const balances = await Promise.all(users.map((u) => balanceOf(u.id)));
@@ -44,7 +44,7 @@ describe('buy ticket transaction', () => {
   it('insufficient coins -> 402 and nothing is written', async () => {
     const { draw } = await makeDraw({ price: 50 });
     const u = await makeUser(49);
-    await expect(buyTicket(u.id, draw.id, { ticketNo: 1 })).rejects.toMatchObject({ status: 402 });
+    await expect(buyTicket(u.id, draw.id, { ticketNo: 100001 })).rejects.toMatchObject({ status: 402 });
     expect(await balanceOf(u.id)).toBe(49);
     expect(await db.select().from(tickets)).toHaveLength(0);
   });
@@ -52,7 +52,7 @@ describe('buy ticket transaction', () => {
   it('closed draw (inside cutoff) -> 400', async () => {
     const { draw } = await makeDraw({ drawTime: new Date(Date.now() + 10_000) });
     const u = await makeUser(1000);
-    await expect(buyTicket(u.id, draw.id, { ticketNo: 1 })).rejects.toMatchObject({ status: 400, code: 'DRAW_CLOSED' });
+    await expect(buyTicket(u.id, draw.id, { ticketNo: 100001 })).rejects.toMatchObject({ status: 400, code: 'DRAW_CLOSED' });
   });
 
   it('idempotency key replays the first response without charging twice', async () => {
@@ -64,9 +64,9 @@ describe('buy ticket transaction', () => {
     expect(await balanceOf(u.id)).toBe(950);
   });
 
-  it('out-of-range number -> 400', async () => {
+  it('non 6-digit number -> 400', async () => {
     const { draw } = await makeDraw({ max: 10 });
     const u = await makeUser(1000);
-    await expect(buyTicket(u.id, draw.id, { ticketNo: 11 })).rejects.toMatchObject({ status: 400 });
+    await expect(buyTicket(u.id, draw.id, { ticketNo: 99999 })).rejects.toMatchObject({ status: 400 });
   });
 });

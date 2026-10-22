@@ -36,7 +36,7 @@ export async function makeDraw(opts: {
 }
 
 /** Insert sold tickets directly (bypasses the buy cutoff so due draws can be built). */
-export async function sellTickets(drawId: number, price: number, count: number, startNo = 1) {
+export async function sellTickets(drawId: number, price: number, count: number, startNo = 100001) {
   const sold: { userId: number; ticketNo: number }[] = [];
   for (let i = 0; i < count; i++) {
     const u = await makeUser(1000 - price); // as if they already paid
