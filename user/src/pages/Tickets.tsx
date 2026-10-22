@@ -30,20 +30,12 @@ export function Tickets() {
           const cancelled = draw.status === 'cancelled';
           const won = tickets.some((ticket) => ticket.won);
           return (
-            <Link key={draw.drawId} to={`/draw/${draw.drawId}`} className="block">
-              <Card className="!overflow-hidden !p-0">
-                <div
-                  className="flex items-center justify-between gap-3 px-3 py-2.5 text-white"
-                  style={{ background: `linear-gradient(110deg, ${theme.packages[draw.theme].from}, ${theme.packages[draw.theme].to})` }}
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-base font-extrabold">{draw.packageName}</div>
-                    <div className="mt-0.5 text-[11px] text-white/85">Draw {fmtDateTime(draw.drawTime)}</div>
-                  </div>
-                  <div className="shrink-0 rounded-lg bg-white/15 px-2 py-1 text-right text-[11px] font-semibold">
-                    <div>{tickets.length} {tickets.length === 1 ? 'Ticket' : 'Tickets'}</div>
-                    <Coins n={draw.price} size={11} />
-                  </div>
+            <Link key={t.ticketId} to={`/draw/${t.drawId}`}>
+              <Card className="mb-3 flex items-center gap-3 !p-3">
+                <div className="flex min-h-14 w-[5.25rem] shrink-0 flex-col items-center justify-center rounded-xl px-1 text-white"
+                  style={{ background: `linear-gradient(160deg, ${theme.packages[t.theme].from}, ${theme.packages[t.theme].to})` }}>
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-white/80">Ticket</span>
+                  <span className="text-base font-extrabold leading-tight tabular-nums">{ticketLabel(t.ticketNo)}</span>
                 </div>
                 <div className="space-y-2.5 p-3">
                   <ModeBadge mode={draw.mode} className="!bg-brand-light !text-brand-dark" />

@@ -6,8 +6,8 @@ import { useAuth } from '../lib/auth';
 
 const FAQ: [string, string][] = [
   ['Are coins real money?', `No. ${COIN_NOTE}. They cannot be bought or cashed out.`],
-  ['How do I get coins?', 'You get a signup bonus and can claim free coins once every 24 hours in the Wallet.'],
-  ['How many tickets can I buy?', 'Exactly one ticket per draw. Choose a free number or tap Random Number.'],
+  ['How do I get coins?', 'You get a signup bonus when you register. Play coins only, no real value.'],
+  ['How many tickets can I buy?', 'As many as you like in one draw, one number per ticket. Each booking picks a free number or a Random Number and costs the ticket price. More tickets means more chances.'],
   ['How is the winner chosen?', 'Each draw shows its mode: "Random draw" (provably fair, verifiable on the Verify page) or "Admin-selected winner".'],
   ['What if a draw does not fill up?', 'If fewer than the minimum tickets are sold the draw is cancelled and all tickets are refunded.'],
 ];

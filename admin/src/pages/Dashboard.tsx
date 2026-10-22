@@ -6,7 +6,7 @@ import { fmtDateTime } from '../lib/time';
 import type { AdminDraw, AdminPkg, AuditRow, ManagedUser } from '../lib/types';
 
 const Stat = ({ label, children }: { label: string; children: React.ReactNode }) => (
-  <Card><div className="text-xs text-muted">{label}</div><div className="text-2xl font-extrabold text-brand-dark">{children}</div></Card>
+  <Card><div className="text-xs text-muted">{label}</div><div className="text-xl font-extrabold text-brand-dark sm:text-2xl">{children}</div></Card>
 );
 
 export function Dashboard() {
@@ -39,7 +39,7 @@ export function Dashboard() {
           )}</Load>
         </Card>
         <Card>
-          <div className="mb-2 flex items-center justify-between"><h2 className="font-semibold">Recent admin activity</h2><Link to="/audit" className="text-sm font-semibold text-brand">All</Link></div>
+          <div className="mb-2 flex items-center justify-between"><h2 className="font-semibold">Recent admin activity</h2></div>
           <Load q={audit}>{(d) => d.log.length === 0 ? <p className="text-sm text-muted">Nothing yet.</p> : (
             <div className="divide-y divide-line">
               {d.log.slice(0, 6).map((a) => (

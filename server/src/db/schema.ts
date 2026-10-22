@@ -8,7 +8,7 @@ export const ledgerTypeEnum = pgEnum('ledger_type', [
   'signup_bonus', 'daily_claim', 'ticket_purchase', 'prize', 'refund', 'admin_adjust',
 ]);
 export const prizeTypeEnum = pgEnum('prize_type', ['fixed', 'pool_percent']);
-export const themeEnum = pgEnum('theme', ['green', 'red', 'blue']);
+export const themeEnum = pgEnum('theme', ['green', 'red', 'blue', 'purple', 'pink']);
 export const drawStatusEnum = pgEnum('draw_status', ['open', 'drawing', 'completed', 'cancelled']);
 export const drawModeEnum = pgEnum('draw_mode', ['random', 'admin_selected']);
 
@@ -51,15 +51,17 @@ export const packages = pgTable('packages', {
   prizeType: prizeTypeEnum('prize_type').notNull(),
   prizeValue: big('prize_value').notNull(),
   maxTickets: integer('max_tickets').notNull(),
-  minTickets: integer('min_tickets').notNull(),
-  drawIntervalMinutes: integer('draw_interval_minutes').notNull(),
+  // schedule: EITHER repeat every N minutes OR once a day at daily_time ("HH:MM", Indian Standard Time)
+  drawIntervalMinutes: integer('draw_interval_minutes'),
+  dailyTime: text('daily_time'),
   theme: themeEnum('theme').notNull(),
   isActive: boolean('is_active').notNull().default(true),
 }, (t) => [
   check('pkg_price_pos', sql`${t.price} > 0`),
   check('pkg_max_range', sql`${t.maxTickets} BETWEEN 1 AND 9999`),
-  check('pkg_min_range', sql`${t.minTickets} BETWEEN 0 AND ${t.maxTickets}`),
-  check('pkg_interval_pos', sql`${t.drawIntervalMinutes} > 0`),
+  check('pkg_interval_pos', sql`${t.drawIntervalMinutes} IS NULL OR ${t.drawIntervalMinutes} > 0`),
+  check('pkg_daily_time_fmt', sql`${t.dailyTime} IS NULL OR ${t.dailyTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`),
+  check('pkg_one_schedule', sql`(${t.drawIntervalMinutes} IS NULL) <> (${t.dailyTime} IS NULL)`),
 ]);
 
 // Package values are snapshotted onto each draw at open time, so editing a package never
@@ -79,7 +81,6 @@ export const draws = pgTable('draws', {
   prizeType: prizeTypeEnum('prize_type').notNull(),
   prizeValue: big('prize_value').notNull(),
   maxTickets: integer('max_tickets').notNull(),
-  minTickets: integer('min_tickets').notNull(),
   serverSeedHash: text('server_seed_hash').notNull(),
   serverSeed: text('server_seed'), // null until reveal
   createdAt: ts('created_at').notNull().defaultNow(),
@@ -98,7 +99,7 @@ export const tickets = pgTable('tickets', {
   createdAt: ts('created_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('tickets_draw_no_uq').on(t.drawId, t.ticketNo),
-  uniqueIndex('tickets_draw_user_uq').on(t.drawId, t.userId),
+  index('tickets_draw_user_idx').on(t.drawId, t.userId),
   index('tickets_user_idx').on(t.userId),
 ]);
 

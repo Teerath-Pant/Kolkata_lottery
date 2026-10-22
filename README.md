@@ -23,7 +23,7 @@ user/                      player app (mobile-first, 430px frame)
   src/pages/*              Splash, Auth, Home, Packages, Draw, Book, Tickets, Wallet, Results, Verify, More, Info
   src/components/*         Layout (tab bar), ui, Toast, Celebration, PackageCard
 admin/                     separate admin panel app (own login, admin role only)
-  src/pages/*              Login, Dashboard, Draws (mode + winner), Packages, Users (coin adjust), Audit
+  src/pages/*              Login, Dashboard, Draws (mode + winner), Packages, Users (coin adjust), Winners
 ```
 
 ## Setup
@@ -71,7 +71,7 @@ Covered: buy transaction races (20 users, same number; one user x10 parallel; 30
 ## How it works
 
 - **Package values live in the DB** and are snapshotted onto each draw when it opens (price, prize rule, max/min tickets). Editing a package affects the *next* draw only.
-- **Buy** is one transaction: lock draw row (shared) → lock wallet row (`FOR UPDATE`) → idempotency lookup → check open + before cutoff → one ticket per user → insert ticket (unique constraints decide races, `ON CONFLICT DO NOTHING`) → deduct coins → ledger. Errors: 409 `TICKET_TAKEN` / `ALREADY_HAS_TICKET`, 402 `INSUFFICIENT_COINS`, 400 `DRAW_CLOSED`. Random numbers use `crypto.randomInt` over free numbers and retry on conflict.
+- **Buy** is one transaction: lock draw row (shared) → lock wallet row (`FOR UPDATE`) → idempotency lookup → check open + before cutoff → insert ticket (unique constraint on draw + number decides races, `ON CONFLICT DO NOTHING`) → deduct coins → ledger. A user can hold any number of tickets in a draw (one per buy call, limited by coins and `max_tickets`). Errors: 409 `TICKET_TAKEN`, 402 `INSUFFICIENT_COINS`, 400 `DRAW_CLOSED`. Random numbers use `crypto.randomInt` over free numbers and retry on conflict.
 - **Draw job** (`node-cron`, every minute and once at startup): for each due open draw, one transaction does `UPDATE … SET status='drawing' WHERE status='open'`; only one runner can match, so double runs are no-ops. It picks the winner, credits the prize, reveals the seed, completes the draw and opens the next one (a partial unique index allows only one open draw per package). Lock order is draw → wallet in both buy and job, so they cannot deadlock.
 - **Provably fair**: on open, the server generates `server_seed` and publishes `SHA-256(seed)`. Winner = `sortedSoldTickets[ HMAC_SHA256(key = seed, msg = String(draw_id)) mod soldCount ]`. The seed is never returned by the API until the draw finishes. The Verify page recomputes everything in the browser with WebCrypto.
 - **Admin-selected** draws are labelled publicly with the badge "Admin-selected winner" everywhere a draw is shown; random draws show "Random draw". The selected ticket is never exposed publicly before the draw. Admin can change mode/winner only while the draw is `open` and before `draw_time`. If the selected ticket is unsold or none was chosen, the winner falls back to the seed-derived random pick and a `draw_fallback_random` audit row is written. Every admin action is in `admin_audit_log`.
@@ -81,16 +81,17 @@ Covered: buy transaction races (20 users, same number; one user x10 parallel; 30
 
 | Topic | Default |
 |---|---|
-| Signup bonus / daily claim / buy cutoff | 500 coins / 50 coins / 30 s before draw time (`SIGNUP_BONUS`, `DAILY_CLAIM_AMOUNT`, `BUY_CUTOFF_SECONDS`) |
+| Signup bonus / buy cutoff | 500 coins / 30 s before draw time (`SIGNUP_BONUS`, `BUY_CUTOFF_SECONDS`) |
 | Seed packages | Green 50 (fixed prize 2000), Red 100 (80% of pool), Blue 200 (fixed 10000); 100 tickets each, min 5/5/3, a draw every 30 min |
 | Ticket numbers | random 6-digit (100000–999999); `max_tickets` (≤ 9999) caps how many are sold. Pick grid shows 10 free numbers from a stable per-draw sequence (sha256 of the public seed hash); a sold number is replaced in the same slot |
 | Draw with no tickets | status `cancelled` (nothing to refund), next draw opens |
-| Draw below `min_tickets` | status `cancelled`, every buyer refunded (ledger `refund`), audit row by `system` |
-| Extra draw columns | `ticket_price, prize_type, prize_value, max_tickets, min_tickets` (snapshot), `winner_user_id, prize_amount, win_method, completed_at`; `admin_audit_log.admin_id` is nullable for system actions |
+| Draw schedule | per package, one of: repeat every N minutes (`draw_interval_minutes`) or once a day at a fixed time (`daily_time`, `HH:MM`, Indian Standard Time = UTC+5:30). The Admin form disables the one you don't pick; a DB check enforces exactly one. Changes apply to the next draw that opens |
+| Minimum tickets | none: a draw with even one sold ticket runs and that ticket wins. A draw with no tickets is skipped (status `cancelled`, nothing to refund) |
+| Extra draw columns | `ticket_price, prize_type, prize_value, max_tickets` (snapshot), `winner_user_id, prize_amount, win_method, completed_at`; `admin_audit_log.admin_id` is nullable for system actions |
 | Idempotency keys | scoped per user (primary key `(user_id, key)`) |
 | Passwords | `bcryptjs` (same bcrypt algorithm, pure JS, no native build on Windows). Every password gets its own random salt, stored inside the hash; cost 12 (`BCRYPT_ROUNDS`). Plaintext is never stored or logged |
 | Mobile format | exactly 10 digits |
-| Tokens | access 15 min, refresh 30 days, stateless JWTs; the client refreshes on 401 |
+| Tokens | access 15 min, refresh 30 days, stateless JWTs. Browser apps get them as `HttpOnly; SameSite=Lax` cookies (`Secure` in production, so serve over HTTPS); JS never sees them and the client refreshes on 401. The refresh cookie is only sent to `/api/v1/auth/*`. Player and admin apps use separate cookie pairs (`at`/`rt`, `admin_at`/`admin_rt`), picked by the `X-Client: user\|admin` header, which cookie-authenticated writes must also send (CSRF guard). API clients without `X-Client` get the tokens in the JSON body and use `Authorization: Bearer`. `POST /auth/logout` clears the cookies |
 | Results date filter | calendar day in UTC |
 | Winner names | masked in public results (`A***`) |
 | Rate limits | 300 req/min per IP on the API, 30 login/register attempts per 15 min per IP |

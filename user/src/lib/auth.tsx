@@ -1,6 +1,6 @@
-import { createContext, ReactNode, useCallback, useContext, useState } from 'react';
+import { createContext, ReactNode, useContext } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, tokens } from './api';
+import { api } from './api';
 import type { User } from './types';
 
 interface AuthCtx {
@@ -17,30 +17,25 @@ export const useAuth = () => useContext(Ctx);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
-  // state (not just localStorage) so the `me` query switches on as soon as a login stores tokens
-  const [authed, setAuthed] = useState(() => !!tokens.get());
+  // The session lives in httpOnly cookies, so JS can't tell if we're logged in: ask the server. A 401 means logged out.
   const fetchMe = () => api<{ user: User; balance: number }>('/me');
   const me = useQuery({
     queryKey: ['me'],
     queryFn: fetchMe,
-    enabled: authed,
     retry: false,
-    refetchInterval: 15_000,
+    refetchInterval: (q) => (q.state.data ? 15_000 : false),
   });
 
-  const afterAuth = useCallback(async (r: { accessToken: string; refreshToken: string }) => {
-    tokens.set(r);
-    setAuthed(true);
-    await qc.fetchQuery({ queryKey: ['me'], queryFn: () => api<{ user: User; balance: number }>('/me'), staleTime: 0 });
-  }, [qc]);
+  // the login/register response already set the cookies, so just load the profile
+  const afterAuth = () => qc.fetchQuery({ queryKey: ['me'], queryFn: fetchMe, staleTime: 0 });
 
   const value: AuthCtx = {
-    user: authed ? me.data?.user ?? null : null,
+    user: me.data?.user ?? null,
     balance: me.data?.balance ?? 0,
-    loading: authed && me.isLoading,
-    login: async (mobile, password) => afterAuth(await api('/auth/login', { body: { mobile, password } })),
-    register: async (mobile, name, password) => afterAuth(await api('/auth/register', { body: { mobile, name, password } })),
-    logout: () => { tokens.clear(); qc.clear(); window.location.assign('/login'); },
+    loading: me.isLoading,
+    login: async (mobile, password) => { await api('/auth/login', { body: { mobile, password } }); await afterAuth(); },
+    register: async (mobile, name, password) => { await api('/auth/register', { body: { mobile, name, password } }); await afterAuth(); },
+    logout: () => { api('/auth/logout', { method: 'POST' }).catch(() => undefined).finally(() => { qc.clear(); window.location.assign('/login'); }); },
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

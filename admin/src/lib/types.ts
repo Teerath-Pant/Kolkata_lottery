@@ -10,9 +10,13 @@ export interface AdminDraw {
 
 export interface AdminPkg {
   id: number; name: string; price: number; prizeType: 'fixed' | 'pool_percent'; prizeValue: number; maxTickets: number;
-  minTickets: number; drawIntervalMinutes: number; theme: 'green' | 'red' | 'blue'; isActive: boolean;
+  drawIntervalMinutes: number | null; dailyTime: string | null; theme: 'green' | 'red' | 'blue' | 'purple' | 'pink'; isActive: boolean;
 }
 
 export interface ManagedUser { id: number; mobile: string; name: string; role: string; balance: number | null; createdAt: string }
 
+export interface WinnerRow {
+  drawId: number; packageName: string; drawTime: string; ticketNo: number | null; prizeAmount: number | null; winMethod: string | null;
+  userId: number; name: string; mobile: string;
+}
 export interface AuditRow { id: number; adminId: number | null; action: string; drawId: number | null; payload: unknown; ip: string | null; createdAt: string }

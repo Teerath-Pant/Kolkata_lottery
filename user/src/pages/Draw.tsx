@@ -19,14 +19,13 @@ import { fmtDateTime, ticketLabel } from "../lib/time";
 import type { Draw } from "../lib/types";
 import { DRAW_PACKAGE_COLORS, themeGradient } from "../theme";
 
-const HOW: [string, string][] = [
-  ["Choose a Lottery", "On the Home page, look at different lottery draws (₹1 Crore, ₹2 Crore, etc.) and select the one you want to play."],
-  ["Choose Your Ticket Numbers", "Tap Book Now. Select your lucky numbers manually, or tap Random Number to let the app pick them for you."],
-  ["Select Ticket Quantity", "Want more tickets? Tap + to add more or − to reduce the number of tickets."],
-  ["Pay for Your Tickets", "Check your numbers, quantity, and total price. Choose a payment method and complete the payment."],
-  ["View Your Tickets", "Once the payment is successful, go to My Wallet or My Tickets to see your purchased tickets."],
-  ["Wait for the Draw", "Each draw happens after the 45-minute booking window closes. Check the countdown timer on the screen."],
-  ["Check the Results", "Go to the Results section. Compare your ticket numbers with the winning numbers to see if you won!"],
+const HOW = [
+  'Buy as many tickets as you like, one number per ticket.',
+  'Pick a free number from the grid, or tap Random Number and let the server choose.',
+  'Tickets cost play coins. Coins have no real-world value and cannot be cashed out.',
+  'At draw time the winning ticket is announced and the prize coins are credited automatically.',
+  'The draw mode (Random draw / Admin-selected winner) is shown on this screen. Random draws are provably fair: verify any result on the Verify page.',
+  'If too few tickets are sold, the draw is cancelled and everyone is refunded.',
 ];
 
 // Sequence (Name admin mein bilkul aise hi hona chahiye)
@@ -325,25 +324,14 @@ export function DrawPage() {
           >
             <Coins n={d.ticketPrice} size={26} />
           </div>
-          {open && d.myTicketNo && (
-            <div className="mb-3 rounded-btn bg-brand-light py-2 text-center text-sm font-bold text-brand-dark">
-              Aapke paas is draw ka ticket #{ticketLabel(d.myTicketNo)} hai.
+          {open && d.myTicketNos.length > 0 && (
+            <div className="mb-3 rounded-btn bg-brand-light py-3 text-center text-sm font-bold text-brand-dark">
+              Your tickets: {d.myTicketNos.map((n) => `#${ticketLabel(n)}`).join(', ')}
             </div>
           )}
-          {open &&
-            (btnStyle ? (
-              <button
-                onClick={() => nav(`/book/${d.id}`)}
-                style={btnStyle}
-                className="w-full rounded-btn py-3 text-lg font-bold text-white active:translate-y-1"
-              >
-                {d.myTicketNo ? "Aur Ticket Lo" : "Book Now"}
-              </button>
-            ) : (
-              <Button onClick={() => nav(`/book/${d.id}`)}>
-                {d.myTicketNo ? "Aur Ticket Lo" : "Book Now"}
-              </Button>
-            ))}
+          {open && (btnStyle
+            ? <button onClick={() => nav(`/book/${d.id}`)} style={btnStyle} className="w-full rounded-btn py-3 text-lg font-bold text-white active:translate-y-1">{d.myTicketNos.length ? 'Book Another' : 'Book Now'}</button>
+            : <Button onClick={() => nav(`/book/${d.id}`)}>{d.myTicketNos.length ? 'Book Another' : 'Book Now'}</Button>)}
           {!open && <Button onClick={goNext}>Go to next draw</Button>}
         </div>
 
@@ -372,34 +360,11 @@ export function DrawPage() {
           </button>
         </div>
 
-        {panel === "prize" && (
-          <div
-            className="space-y-1 rounded-card bg-white p-4 text-sm"
-            style={whiteCard}
-          >
-            <p>
-              <b>Prize:</b>{" "}
-              {d.prizeType === "fixed" ? (
-                <Coins n={d.prizeValue} />
-              ) : (
-                `${d.prizeValue}% of the ticket pool (now `
-              )}
-              {d.prizeType !== "fixed" && (
-                <>
-                  <Coins n={d.prizeAmount} />)
-                </>
-              )}
-            </p>
-            <p>
-              <b>Tickets:</b> max {d.maxTickets}, minimum {d.minTickets} needed
-              or the draw is cancelled &amp; refunded.
-            </p>
-            <p>
-              <b>Winner selection:</b>{" "}
-              {d.mode === "random"
-                ? "Random (HMAC of a pre-committed server seed)."
-                : "Chosen by the admin before draw time."}
-            </p>
+        {panel === 'prize' && (
+          <div className="space-y-1 rounded-card bg-white p-4 text-sm" style={whiteCard}>
+            <p><b>Prize:</b> {d.prizeType === 'fixed' ? <Coins n={d.prizeValue} /> : `${d.prizeValue}% of the ticket pool (now `}{d.prizeType !== 'fixed' && <><Coins n={d.prizeAmount} />)</>}</p>
+            <p><b>Tickets:</b> max {d.maxTickets}. The draw runs even if only one ticket is sold; with no tickets it is skipped.</p>
+            <p><b>Winner selection:</b> {d.mode === 'random' ? 'Random (HMAC of a pre-committed server seed).' : 'Chosen by the admin before draw time.'}</p>
             <div className="pt-2 text-[11px] text-muted">
               <div className="font-semibold">
                 Provably fair commitment (SHA-256 of server seed)

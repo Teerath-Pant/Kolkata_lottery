@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CountUp } from '../components/motion';
 import { useToast } from '../components/Toast';
-import { Button, Card, Coin, Coins, Countdown, Empty, ErrorBox, PageHeader, Spinner } from '../components/ui';
+import { Card, Coin, Coins, Empty, ErrorBox, PageHeader, Spinner } from '../components/ui';
 import { COIN_NOTE } from '../config';
 import { api } from '../lib/api';
 import { fmtDateTime } from '../lib/time';
@@ -17,17 +17,11 @@ const LABEL: Record<string, string> = {
 const QUICK_AMOUNTS = [100, 500, 1000, 2000];
 
 export function Wallet() {
-  const qc = useQueryClient();
   const toast = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [amount, setAmount] = useState(500);
 
   const q = useQuery({ queryKey: ['wallet'], queryFn: () => api<WalletInfo>('/me/wallet'), refetchInterval: 10_000 });
-  const claim = useMutation({
-    mutationFn: () => api<{ claimed: number }>('/me/daily-claim', { method: 'POST' }),
-    onSuccess: (r) => { toast(`+${r.claimed} coins claimed!`, 'success'); qc.invalidateQueries({ queryKey: ['wallet'] }); qc.invalidateQueries({ queryKey: ['me'] }); },
-    onError: (e) => { toast(e instanceof Error ? e.message : 'Claim failed', 'error'); qc.invalidateQueries({ queryKey: ['wallet'] }); },
-  });
   const w = q.data;
 
   // Abhi sirf UI hai. Backend ready hone par yahan API call lagana.
@@ -59,23 +53,6 @@ export function Wallet() {
               </motion.button>
             </div>
             <p className="mt-1 text-[11px] text-muted">🪙 {COIN_NOTE}</p>
-          </Card>
-
-          <Card className="!bg-gold-light">
-            <div className="flex flex-col gap-3 min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between">
-              <div>
-                <div className="font-semibold">Daily free coins</div>
-                <div className="text-xs text-muted">
-                  {w.canClaim ? <>Claim <Coins n={w.dailyClaimAmount} size={12} /> once every 24 hours</>
-                    : <>Next claim in <Countdown target={w.nextClaimAt!} done="a moment" /></>}
-                </div>
-              </div>
-              <div className="w-full min-[380px]:w-36">
-                <Button variant="gold" disabled={!w.canClaim || claim.isPending} onClick={() => claim.mutate()}>
-                  {claim.isPending ? '…' : w.canClaim ? 'Claim' : 'Claimed'}
-                </Button>
-              </div>
-            </div>
           </Card>
 
           <div className="grid grid-cols-3 gap-3">

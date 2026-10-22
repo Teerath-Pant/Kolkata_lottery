@@ -1,6 +1,5 @@
 import { ReactNode } from 'react';
 import { HTMLMotionProps, motion } from 'framer-motion';
-import { item } from './motion';
 import type { DrawMode } from '../lib/types';
 import { fmtNum } from '../lib/time';
 
@@ -57,10 +56,10 @@ export function Button({ variant = 'primary', className = '', ...p }: HTMLMotion
 }
 
 export const Card = ({ children, className = '' }: { children: ReactNode; className?: string }) => (
-  <motion.div variants={item} whileHover={{ y: -2 }} className={`rounded-card bg-white p-4 shadow-card ${className}`}>{children}</motion.div>
+  <motion.div whileHover={{ y: -2 }} className={`rounded-card bg-white p-4 shadow-card ${className}`}>{children}</motion.div>
 );
 
-export const Empty = ({ children }: { children: ReactNode }) => <motion.p variants={item} className="py-10 text-center text-sm text-muted">{children}</motion.p>;
+export const Empty = ({ children }: { children: ReactNode }) => <p className="py-10 text-center text-sm text-muted">{children}</p>;
 
 export function Load<T>({ q, children }: { q: { isLoading: boolean; error: unknown; data?: T; refetch: () => unknown }; children: (d: T) => ReactNode }) {
   if (q.isLoading) return <Spinner />;

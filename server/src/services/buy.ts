@@ -44,9 +44,6 @@ export async function buyTicket(userId: number, drawId: number, input: BuyInput,
     if (draw.status !== 'open' || now.getTime() >= cutoff) {
       throw new AppError(400, 'DRAW_CLOSED', 'Ticket sales for this draw are closed');
     }
-    const [mine] = await tx.select({ id: tickets.id }).from(tickets)
-      .where(and(eq(tickets.drawId, drawId), eq(tickets.userId, userId)));
-    if (mine) throw new AppError(409, 'ALREADY_HAS_TICKET', 'You already have a ticket in this draw');
     const [{ sold }] = await tx.select({ sold: sql<number>`count(*)::int` }).from(tickets).where(eq(tickets.drawId, drawId));
     if (sold >= draw.maxTickets) throw new AppError(409, 'DRAW_FULL', 'All tickets are sold');
 

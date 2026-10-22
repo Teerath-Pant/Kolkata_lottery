@@ -1,7 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '../src/db';
-import { adminAuditLog, draws, walletLedger } from '../src/db/schema';
+import { adminAuditLog, draws, packages, walletLedger } from '../src/db/schema';
+import { nextDrawFor } from '../src/services/draws';
 import { executeDraw, runDueDraws } from '../src/services/drawJob';
 import { selectWinner, setMode } from '../src/services/admin';
 import { balanceOf, closePool, makeDraw, makeUser, resetDb, sellTickets } from './helpers';
@@ -15,7 +16,7 @@ const openCount = async (packageId: number) =>
 
 describe('draw job', () => {
   it('is idempotent: concurrent + repeated runs pay the prize once and open exactly one next draw', async () => {
-    const { pkg, draw } = await makeDraw({ price: 50, prizeValue: 1000, min: 5, drawTime: past() });
+    const { pkg, draw } = await makeDraw({ price: 50, prizeValue: 1000, drawTime: past() });
     await sellTickets(draw.id, 50, 6);
     const outcomes = await Promise.all([executeDraw(draw.id), executeDraw(draw.id), executeDraw(draw.id)]);
     expect(outcomes.filter((o) => o === 'completed')).toHaveLength(1);
@@ -42,16 +43,31 @@ describe('draw job', () => {
     expect(d.prizeAmount).toBe(800);
   });
 
-  it('below min_tickets: cancels and refunds everyone exactly once', async () => {
-    const { pkg, draw } = await makeDraw({ price: 50, min: 5, drawTime: past() });
-    const sold = await sellTickets(draw.id, 50, 3);
-    await Promise.all([executeDraw(draw.id), executeDraw(draw.id)]);
+  it('a single sold ticket is enough: that ticket wins, no minimum', async () => {
+    const { pkg, draw } = await makeDraw({ price: 50, prizeValue: 1000, drawTime: past() });
+    const [only] = await sellTickets(draw.id, 50, 1);
+    expect(await executeDraw(draw.id)).toBe('completed');
     const [d] = await db.select().from(draws).where(eq(draws.id, draw.id));
-    expect(d.status).toBe('cancelled');
-    expect(d.winnerUserId).toBeNull();
-    for (const s of sold) expect(await balanceOf(s.userId)).toBe(1000);
-    expect(await db.select().from(walletLedger).where(eq(walletLedger.type, 'refund'))).toHaveLength(3);
+    expect(d.status).toBe('completed');
+    expect(d.winnerUserId).toBe(only.userId);
+    expect(await balanceOf(only.userId)).toBe(950 + 1000);
+    expect(await db.select().from(walletLedger).where(eq(walletLedger.type, 'refund'))).toHaveLength(0);
     expect(await openCount(pkg.id)).toBe(1);
+  });
+
+  it('daily fixed time (IST): next draw is the next HH:MM IST after now', async () => {
+    const daily = { drawIntervalMinutes: null, dailyTime: '18:00' }; // 18:00 IST = 12:30 UTC
+    expect(nextDrawFor(daily, new Date(), new Date('2026-10-22T05:06:00Z')).toISOString()).toBe('2026-10-22T12:30:00.000Z');
+    expect(nextDrawFor(daily, new Date(), new Date('2026-10-22T12:30:00Z')).toISOString()).toBe('2026-10-23T12:30:00.000Z'); // exactly on time -> tomorrow
+    expect(nextDrawFor(daily, new Date(), new Date('2026-10-22T20:00:00Z')).toISOString()).toBe('2026-10-23T12:30:00.000Z'); // 01:30 IST next day
+    expect(nextDrawFor({ drawIntervalMinutes: 30, dailyTime: null }, new Date('2026-10-22T10:00:00Z'), new Date('2026-10-22T10:10:00Z')).toISOString()).toBe('2026-10-22T10:30:00.000Z');
+
+    const { pkg, draw } = await makeDraw({ drawTime: past() });
+    await db.update(packages).set({ drawIntervalMinutes: null, dailyTime: '18:00' }).where(eq(packages.id, pkg.id));
+    await executeDraw(draw.id);
+    const [next] = (await db.select().from(draws)).filter((x) => x.status === 'open');
+    expect(next.drawTime.getTime()).toBeGreaterThan(Date.now());
+    expect(new Date(next.drawTime.getTime() + 330 * 60_000).toISOString().slice(11, 16)).toBe('18:00');
   });
 
   it('no tickets: skipped (cancelled) and next draw opens', async () => {
@@ -67,7 +83,7 @@ describe('draw job', () => {
 
   it('admin_selected: selected ticket wins', async () => {
     const admin = await makeUser(0);
-    const { draw } = await makeDraw({ min: 0, mode: 'admin_selected', drawTime: new Date(Date.now() + 3600_000) });
+    const { draw } = await makeDraw({ mode: 'admin_selected', drawTime: new Date(Date.now() + 3600_000) });
     const sold = await sellTickets(draw.id, 50, 5);
     await selectWinner(admin.id, draw.id, 100004);
     await db.update(draws).set({ drawTime: past() }).where(eq(draws.id, draw.id));

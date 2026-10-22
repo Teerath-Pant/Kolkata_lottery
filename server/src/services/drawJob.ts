@@ -2,10 +2,10 @@ import { and, asc, eq, lte } from 'drizzle-orm';
 import { db } from '../db';
 import { adminAuditLog, draws, packages, tickets } from '../db/schema';
 import { pickWinner } from '../lib/fair';
-import { computePrize, nextDrawTime, openDraw } from './draws';
+import { computePrize, nextDrawFor, openDraw } from './draws';
 import { applyWallet } from './wallet';
 
-export type DrawOutcome = 'skipped' | 'completed' | 'cancelled_no_tickets' | 'cancelled_refunded';
+export type DrawOutcome = 'skipped' | 'completed' | 'cancelled_no_tickets';
 
 /**
  * Executes one due draw in a single transaction. Idempotent: the conditional UPDATE open->drawing
@@ -25,14 +25,6 @@ export async function executeDraw(drawId: number, now = new Date()): Promise<Dra
     if (sold.length === 0) {
       await tx.update(draws).set({ status: 'cancelled', ...reveal }).where(eq(draws.id, d.id));
       outcome = 'cancelled_no_tickets';
-    } else if (sold.length < d.minTickets) {
-      for (const t of sold) await applyWallet(tx, t.userId, d.ticketPrice, 'refund', d.id);
-      await tx.update(draws).set({ status: 'cancelled', ...reveal }).where(eq(draws.id, d.id));
-      await tx.insert(adminAuditLog).values({
-        adminId: null, action: 'draw_cancelled_refunded', drawId: d.id,
-        payload: { sold: sold.length, minTickets: d.minTickets, refunded: sold.length * d.ticketPrice },
-      });
-      outcome = 'cancelled_refunded';
     } else {
       const soldNos = sold.map((t) => t.ticketNo);
       let winningNo: number;
@@ -60,7 +52,7 @@ export async function executeDraw(drawId: number, now = new Date()): Promise<Dra
       outcome = 'completed';
     }
 
-    if (pkg.isActive) await openDraw(tx, pkg, nextDrawTime(d.drawTime, pkg.drawIntervalMinutes, now));
+    if (pkg.isActive) await openDraw(tx, pkg, nextDrawFor(pkg, d.drawTime, now));
     return outcome;
   });
 }

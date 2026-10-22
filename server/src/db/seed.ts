@@ -3,12 +3,14 @@ import { config } from '../config';
 import { db, pool } from './index';
 import { packages, users, wallets } from './schema';
 import { hashPassword } from '../services/account';
-import { nextDrawTime, openDraw } from '../services/draws';
+import { nextDrawFor, openDraw } from '../services/draws';
 
 const PACKAGES = [
-  { name: 'Green 50', price: 50, theme: 'green', prizeType: 'fixed', prizeValue: 2000, maxTickets: 100, minTickets: 5, drawIntervalMinutes: 30 },
-  { name: 'Red 100', price: 100, theme: 'red', prizeType: 'pool_percent', prizeValue: 80, maxTickets: 100, minTickets: 5, drawIntervalMinutes: 30 },
-  { name: 'Blue 200', price: 200, theme: 'blue', prizeType: 'fixed', prizeValue: 10000, maxTickets: 100, minTickets: 3, drawIntervalMinutes: 30 },
+  { name: 'Green 50', price: 50, theme: 'green', prizeType: 'fixed', prizeValue: 2000, maxTickets: 100, drawIntervalMinutes: 30 },
+  { name: 'Red 100', price: 100, theme: 'red', prizeType: 'pool_percent', prizeValue: 80, maxTickets: 100, drawIntervalMinutes: 30 },
+  { name: 'Blue 200', price: 200, theme: 'blue', prizeType: 'fixed', prizeValue: 10000, maxTickets: 100, drawIntervalMinutes: 30 },
+  { name: 'Purple 500', price: 500, theme: 'purple', prizeType: 'fixed', prizeValue: 25000, maxTickets: 100, drawIntervalMinutes: 30 },
+  { name: 'Pink 1000', price: 1000, theme: 'pink', prizeType: 'fixed', prizeValue: 50000, maxTickets: 100, drawIntervalMinutes: 30 },
 ] as const;
 
 export async function seed() {
@@ -25,7 +27,7 @@ export async function seed() {
       if (existing.some((e) => e.price === p.price)) continue; // idempotent
       const [pkg] = await tx.insert(packages).values({ ...p }).returning();
       const now = new Date();
-      await openDraw(tx, pkg, nextDrawTime(now, pkg.drawIntervalMinutes, now));
+      await openDraw(tx, pkg, nextDrawFor(pkg, now, now));
     }
   });
 }
