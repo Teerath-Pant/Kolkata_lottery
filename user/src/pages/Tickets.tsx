@@ -1,13 +1,13 @@
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Card, Coins, Empty, ErrorBox, ModeBadge, PageHeader, Spinner } from '../components/ui';
+import { Card, Empty, ErrorBox, ModeBadge, PageHeader, Spinner } from '../components/ui';
 import { api } from '../lib/api';
-import { fmtDateTime, ticketLabel } from '../lib/time';
+import { ticketLabel } from '../lib/time';
 import type { MyTicket } from '../lib/types';
 import { theme } from '../theme';
 
 export function Tickets() {
-  const [sp, setSp] = useSearchParams();
+  const [sp] = useSearchParams();
   const tab = sp.get('tab') === 'results' ? 'results' : 'all';
   const q = useQuery({ queryKey: ['tickets'], queryFn: () => api<{ tickets: MyTicket[] }>('/me/tickets'), refetchInterval: 8000 });
   const rows = (q.data?.tickets ?? []).filter((t) => tab === 'all' || t.status === 'completed' || t.status === 'cancelled');
@@ -30,17 +30,17 @@ export function Tickets() {
           const cancelled = draw.status === 'cancelled';
           const won = tickets.some((ticket) => ticket.won);
           return (
-            <Link key={t.ticketId} to={`/draw/${t.drawId}`}>
+            <Link key={draw.drawId} to={`/draw/${draw.drawId}`}>
               <Card className="mb-3 flex items-center gap-3 !p-3">
                 <div className="flex min-h-14 w-[5.25rem] shrink-0 flex-col items-center justify-center rounded-xl px-1 text-white"
-                  style={{ background: `linear-gradient(160deg, ${theme.packages[t.theme].from}, ${theme.packages[t.theme].to})` }}>
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-white/80">Ticket</span>
-                  <span className="text-base font-extrabold leading-tight tabular-nums">{ticketLabel(t.ticketNo)}</span>
+                  style={{ background: `linear-gradient(160deg, ${theme.packages[draw.theme].from}, ${theme.packages[draw.theme].to})` }}>
+                  <span className="max-w-full truncate text-[11px] font-semibold uppercase tracking-wider text-white/80" title={draw.packageName}>{draw.packageName}</span>
+                  <span className="text-sm font-extrabold leading-tight tabular-nums">{tickets.length} {tickets.length === 1 ? 'ticket' : 'tickets'}</span>
                 </div>
                 <div className="space-y-2.5 p-3">
                   <ModeBadge mode={draw.mode} className="!bg-brand-light !text-brand-dark" />
                   <div className="rounded-xl border border-line bg-slate-50 p-2.5">
-                    <div className="mb-1.5 text-[11px] font-semibold text-muted">Your ticket numbers</div>
+                    <div className="mb-1.5 text-[11px] font-semibold text-muted">Your ticket numbers ({tickets.length})</div>
                     <div className="flex flex-wrap gap-1.5">
                     {tickets.map((ticket) => (
                       <span
