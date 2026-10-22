@@ -2,7 +2,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { Exec, Tx, db } from '../db';
 import { adminAuditLog, draws, packages, tickets, users, wallets } from '../db/schema';
 import { AppError, notFound } from '../lib/errors';
-import { nextDrawTime, openDraw } from './draws';
+import { TICKET_MAX, TICKET_MIN, nextDrawTime, openDraw } from './draws';
 import { applyWallet } from './wallet';
 
 export const audit = (exec: Exec, adminId: number, action: string, drawId: number | null, payload: unknown, ip?: string) =>
@@ -54,7 +54,7 @@ export async function setMode(adminId: number, drawId: number, mode: 'random' | 
 export async function selectWinner(adminId: number, drawId: number, ticketNo: number, ip?: string, now = new Date()) {
   return db.transaction(async (tx) => {
     const d = await lockEditableDraw(tx, drawId, now);
-    if (ticketNo < 1 || ticketNo > d.maxTickets) throw new AppError(400, 'INVALID_TICKET', `Ticket must be 1-${d.maxTickets}`);
+    if (ticketNo < TICKET_MIN || ticketNo > TICKET_MAX) throw new AppError(400, 'INVALID_TICKET', 'Ticket must be a 6-digit number');
     await tx.update(draws).set({ selectedTicketNo: ticketNo }).where(eq(draws.id, drawId));
     await audit(tx, adminId, 'select_winner', drawId, { previous: d.selectedTicketNo, ticketNo, mode: d.mode }, ip);
     return { drawId, selectedTicketNo: ticketNo, mode: d.mode };

@@ -83,7 +83,7 @@ Covered: buy transaction races (20 users, same number; one user x10 parallel; 30
 |---|---|
 | Signup bonus / daily claim / buy cutoff | 500 coins / 50 coins / 30 s before draw time (`SIGNUP_BONUS`, `DAILY_CLAIM_AMOUNT`, `BUY_CUTOFF_SECONDS`) |
 | Seed packages | Green 50 (fixed prize 2000), Red 100 (80% of pool), Blue 200 (fixed 10000); 100 tickets each, min 5/5/3, a draw every 30 min |
-| Ticket numbers | 1..`max_tickets` shown as 4 digits (0001…); `max_tickets` ≤ 9999; grid pages of 100 |
+| Ticket numbers | random 6-digit (100000–999999); `max_tickets` (≤ 9999) caps how many are sold. Pick grid shows 10 free numbers from a stable per-draw sequence (sha256 of the public seed hash); a sold number is replaced in the same slot |
 | Draw with no tickets | status `cancelled` (nothing to refund), next draw opens |
 | Draw below `min_tickets` | status `cancelled`, every buyer refunded (ledger `refund`), audit row by `system` |
 | Extra draw columns | `ticket_price, prize_type, prize_value, max_tickets, min_tickets` (snapshot), `winner_user_id, prize_amount, win_method, completed_at`; `admin_audit_log.admin_id` is nullable for system actions |
