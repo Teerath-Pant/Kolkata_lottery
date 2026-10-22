@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { motion } from "framer-motion";
 import { Celebration } from "../components/Celebration";
 import { prizeText } from "../components/PackageCard";
 import { useToast } from "../components/Toast";
@@ -18,13 +19,14 @@ import { fmtDateTime, ticketLabel } from "../lib/time";
 import type { Draw } from "../lib/types";
 import { themeGradient } from "../theme";
 
-const HOW = [
-  "Each draw sells one ticket per player.",
-  "Pick a free number from the grid, or tap Random Number and let the server choose.",
-  "Tickets cost play coins. Coins have no real-world value and cannot be cashed out.",
-  "At draw time the winning ticket is announced and the prize coins are credited automatically.",
-  "The draw mode (Random draw / Admin-selected winner) is shown on this screen. Random draws are provably fair: verify any result on the Verify page.",
-  "If too few tickets are sold, the draw is cancelled and everyone is refunded.",
+const HOW: [string, string][] = [
+  ["Choose a Lottery", "On the Home page, look at different lottery draws (₹1 Crore, ₹2 Crore, etc.) and select the one you want to play."],
+  ["Choose Your Ticket Numbers", "Tap Book Now. Select your lucky numbers manually, or tap Random Number to let the app pick them for you."],
+  ["Select Ticket Quantity", "Want more tickets? Tap + to add more or − to reduce the number of tickets."],
+  ["Pay for Your Tickets", "Check your numbers, quantity, and total price. Choose a payment method and complete the payment."],
+  ["View Your Tickets", "Once the payment is successful, go to My Wallet or My Tickets to see your purchased tickets."],
+  ["Wait for the Draw", "Each draw happens after the 45-minute booking window closes. Check the countdown timer on the screen."],
+  ["Check the Results", "Go to the Results section. Compare your ticket numbers with the winning numbers to see if you won!"],
 ];
 
 // Sequence (Name admin mein bilkul aise hi hona chahiye)
@@ -118,8 +120,11 @@ export function DrawPage() {
   const col = idx >= 0 ? COLORS[idx] : null;
   const label =
     idx >= 0 ? LABELS[idx] : (prizeText(d) ?? "Grand prize").toUpperCase();
-  const pageStyle = col
-    ? { background: `linear-gradient(180deg, ${col[0]}, ${col[1]})` }
+  const pageStyle: React.CSSProperties = col
+    ? {
+        backgroundColor: "#090b12",
+        backgroundImage: `radial-gradient(ellipse at 50% 0%, ${col[0]}66 0%, transparent 48%), radial-gradient(ellipse at 100% 38%, ${col[1]} 0%, transparent 42%), linear-gradient(160deg, #191b29 0%, #0b0d15 58%, #07090f 100%)`,
+      }
     : themeGradient(d.theme);
   const btnStyle: React.CSSProperties | undefined = col
     ? {
@@ -174,14 +179,31 @@ export function DrawPage() {
         {/* Prize badge: image (agar naam match kare), warna purana text card */}
         {idx >= 0 ? (
           <div className="text-center text-white">
-            <div className="mx-auto flex h-[280px] items-center justify-center md:h-[330px]">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              whileHover={{ scale: 1.015 }}
+              transition={{ duration: 0.35 }}
+              className="relative flex h-[300px] w-full items-center justify-center overflow-hidden rounded-2xl border p-2 shadow-2xl md:h-[350px]"
+              style={{
+                background: `linear-gradient(145deg, ${col?.[1]}, #101323 55%, ${col?.[3]})`,
+                borderColor: `${col?.[0]}aa`,
+                boxShadow: `0 0 0 1px ${col?.[0]}55, 0 12px 28px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.3)`,
+              }}
+            >
+              <motion.div
+                aria-hidden
+                className="pointer-events-none absolute -inset-y-1/2 left-0 z-10 w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                animate={{ x: ['-180%', '480%'] }}
+                transition={{ duration: 4, repeat: Infinity, repeatDelay: 1, ease: 'linear' }}
+              />
               <img
                 src={CARD_IMG[idx]}
                 alt={`${d.packageName} ${label}`}
-                className="h-full w-auto max-w-full select-none object-contain drop-shadow-2xl"
+                className="relative z-0 h-full w-full select-none object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.55)]"
                 draggable={false}
               />
-            </div>
+            </motion.div>
             <div className="mt-4 text-sm text-white/90">
               Prize:{" "}
               {d.prizeType === "fixed" ? (
@@ -413,9 +435,16 @@ export function DrawPage() {
             className="list-decimal space-y-1 rounded-card bg-white p-4 pl-8 text-sm"
             style={whiteCard}
           >
-            {HOW.map((h) => (
-              <li key={h}>{h}</li>
+            {HOW.map(([title, detail]) => (
+              <li key={title}>
+                <strong>{title}</strong>
+                <br />
+                {detail}
+              </li>
             ))}
+            <li className="mt-2 list-none font-semibold text-bad">
+              🔴 <strong>Note:</strong> Always double-check draw times, ticket prices, and official results. Good luck! 🤞🍀
+            </li>
           </ol>
         )}
       </div>

@@ -8,6 +8,7 @@ import { Help, Settings } from './pages/Info';
 import { Home } from './pages/Home';
 import { More } from './pages/More';
 import { Packages } from './pages/Packages';
+import { Payment } from './pages/Payment';
 import { Results } from './pages/Results';
 import { Splash } from './pages/Splash';
 import { Tickets } from './pages/Tickets';
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/packages" element={<Packages />} />
         <Route path="/draw/:id" element={<DrawPage />} />
         <Route path="/book/:id" element={<Book />} />
+        <Route path="/payment" element={<Payment />} />
         <Route path="/verify" element={<Verify />} />
         <Route path="/verify/:id" element={<Verify />} />
         <Route path="/refer" element={<Refer />} />
