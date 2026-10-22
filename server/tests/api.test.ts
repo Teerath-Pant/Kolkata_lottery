@@ -20,8 +20,10 @@ async function call(path: string, o: { method?: string; body?: unknown; token?: 
     headers: { 'Content-Type': 'application/json', ...(o.token ? { Authorization: `Bearer ${o.token}` } : {}), ...o.headers },
     body: o.body ? JSON.stringify(o.body) : undefined,
   });
-  return { status: res.status, body: await res.json().catch(() => null) as any };
+  return { status: res.status, headers: res.headers, body: await res.json().catch(() => null) as any };
 }
+/** "name=value" pairs of the Set-Cookie headers, ready to send back as a Cookie header. */
+const cookieJar = (h: Headers) => h.getSetCookie().map((c) => c.split(';')[0]).join('; ');
 const register = async (mobile = '9876543210') =>
   (await call('/auth/register', { body: { mobile, name: 'Asha', password: 'secret1' } })).body;
 
@@ -41,6 +43,43 @@ describe('http api', () => {
     expect((await call('/me')).status).toBe(401);
   });
 
+  it('browser apps: tokens only in httpOnly cookies, refresh + logout via cookie, CSRF header required', async () => {
+    const client = { 'X-Client': 'user' };
+    const reg = await call('/auth/register', { body: { mobile: '9876500001', name: 'Asha', password: 'secret1' }, headers: client });
+    expect(reg.status).toBe(201);
+    expect(reg.body.accessToken).toBeUndefined();
+    expect(reg.body.refreshToken).toBeUndefined();
+    const set = reg.headers.getSetCookie();
+    expect(set).toHaveLength(2);
+    for (const c of set) expect(c).toMatch(/HttpOnly/i), expect(c).toMatch(/SameSite=Lax/i);
+    expect(set.find((c) => c.startsWith('rt='))).toMatch(/Path=\/api\/v1\/auth/);
+
+    const Cookie = cookieJar(reg.headers);
+    expect((await call('/me', { headers: { Cookie, ...client } })).body.user.mobile).toBe('9876500001');
+    expect((await call('/me', { headers: { Cookie } })).status).toBe(200); // reads need no header
+    const drawId = (await call('/packages')).body.packages[0].currentDraw.id;
+    const buy = { method: 'POST', body: { random: true } };
+    expect((await call(`/draws/${drawId}/buy`, { ...buy, headers: { Cookie } })).status).toBe(403); // cookie write without X-Client
+    expect((await call(`/draws/${drawId}/buy`, { ...buy, headers: { Cookie, ...client } })).status).toBe(201);
+
+    const ref = await call('/auth/refresh', { method: 'POST', headers: { Cookie, ...client } });
+    expect(ref.status).toBe(200);
+    expect(ref.headers.getSetCookie()).toHaveLength(2);
+    expect((await call('/auth/refresh', { method: 'POST', headers: { Cookie } })).status).toBe(403);
+    expect((await call('/auth/refresh', { method: 'POST', headers: client })).status).toBe(401); // no cookie
+
+    const out = await call('/auth/logout', { method: 'POST', headers: { Cookie, ...client } });
+    expect(out.headers.getSetCookie().every((c) => /Expires=Thu, 01 Jan 1970/i.test(c))).toBe(true);
+  });
+
+  it('admin app cookies are separate from the player app cookies', async () => {
+    const admin = await call('/auth/login', { body: { mobile: '9999999999', password: 'Admin@12345' }, headers: { 'X-Client': 'admin' } });
+    const Cookie = cookieJar(admin.headers);
+    expect(Cookie).toMatch(/^admin_at=.*; admin_rt=/);
+    expect((await call('/me', { headers: { Cookie, 'X-Client': 'admin' } })).body.user.role).toBe('admin');
+    expect((await call('/me', { headers: { Cookie, 'X-Client': 'user' } })).status).toBe(401);
+  });
+
   it('passwords are stored salted + hashed (never plaintext, same password -> different hash)', async () => {
     await register('9111111111');
     await register('9222222222');
@@ -53,9 +92,9 @@ describe('http api', () => {
     expect(rows[0].passwordHash).not.toBe(rows[1].passwordHash);
   });
 
-  it('packages come from DB (50/100/200) and expose mode + seed hash but never the seed', async () => {
+  it('packages come from DB (50/100/200/500/1000) and expose mode + seed hash but never the seed', async () => {
     const { body } = await call('/packages');
-    expect(body.packages.map((p: any) => [p.price, p.theme])).toEqual([[50, 'green'], [100, 'red'], [200, 'blue']]);
+    expect(body.packages.map((p: any) => [p.price, p.theme])).toEqual([[50, 'green'], [100, 'red'], [200, 'blue'], [500, 'purple'], [1000, 'pink']]);
     const d = body.packages[0].currentDraw;
     expect(d.mode).toBe('random');
     expect(d.serverSeedHash).toMatch(/^[0-9a-f]{64}$/);
@@ -63,7 +102,7 @@ describe('http api', () => {
     expect((await call(`/draws/${d.id}/verify`)).status).toBe(409);
   });
 
-  it('buy flow: pick, duplicate, taken, random, wallet + ledger, daily claim once', async () => {
+  it('buy flow: pick, duplicate, taken, random, wallet + ledger', async () => {
     const a = await register('9000000001');
     const b = await register('9000000002');
     const draw = (await call('/packages')).body.packages[0].currentDraw;
@@ -73,7 +112,6 @@ describe('http api', () => {
     const ok = await call(`/draws/${draw.id}/buy`, { token: a.accessToken, body: { ticketNo: 100005 } });
     expect(ok.status).toBe(201);
     expect(ok.body.balance).toBe(450);
-    expect((await call(`/draws/${draw.id}/buy`, { token: a.accessToken, body: { random: true } })).body.error.code).toBe('ALREADY_HAS_TICKET');
     expect((await call(`/draws/${draw.id}/buy`, { token: b.accessToken, body: { ticketNo: 100005 } })).body.error.code).toBe('TICKET_TAKEN');
     const rnd = await call(`/draws/${draw.id}/buy`, { token: b.accessToken, body: { random: true }, headers: { 'Idempotency-Key': 'abcdefgh-1' } });
     const again = await call(`/draws/${draw.id}/buy`, { token: b.accessToken, body: { random: true }, headers: { 'Idempotency-Key': 'abcdefgh-1' } });
@@ -92,9 +130,8 @@ describe('http api', () => {
     const w = (await call('/me/wallet', { token: a.accessToken })).body;
     expect(w.balance).toBe(450);
     expect(w.recent.map((r: any) => r.type)).toEqual(['ticket_purchase', 'signup_bonus']);
-    expect((await call('/me/daily-claim', { token: a.accessToken, method: 'POST' })).status).toBe(200);
-    expect((await call('/me/daily-claim', { token: a.accessToken, method: 'POST' })).status).toBe(429);
-    expect((await call(`/draws/${draw.id}`, { token: a.accessToken })).body.myTicketNo).toBe(100005);
+    expect((await call('/me/daily-claim', { token: a.accessToken, method: 'POST' })).status).toBe(404); // feature removed
+    expect((await call(`/draws/${draw.id}`, { token: a.accessToken })).body.myTicketNos).toEqual([100005]);
   });
 
   it('admin: role guard, mode/select/adjust, audit log; public sees the mode', async () => {
@@ -111,15 +148,24 @@ describe('http api', () => {
     expect(adj.body.balance).toBe(525);
     const log = (await call('/admin/audit-log', { token: admin.accessToken })).body.log;
     expect(log.map((l: any) => l.action).sort()).toEqual(['adjust_coins', 'select_winner', 'set_mode']);
-    expect((await call('/admin/packages', { token: admin.accessToken, body: { name: 'Mega', price: 500, prizeType: 'fixed', prizeValue: 9000, maxTickets: 50, theme: 'blue', drawIntervalMinutes: 20 } })).status).toBe(201);
+    const pkg = { name: 'Mega', price: 500, prizeType: 'fixed', prizeValue: 9000, maxTickets: 50, theme: 'blue' };
+    const create = (schedule: object) => call('/admin/packages', { token: admin.accessToken, body: { ...pkg, ...schedule } });
+    expect((await create({ drawIntervalMinutes: 20 })).status).toBe(201);
+    expect((await create({ drawIntervalMinutes: null, dailyTime: '18:30' })).status).toBe(201);
+    expect((await create({ drawIntervalMinutes: 20, dailyTime: '18:30' })).status).toBe(400); // both
+    expect((await create({})).status).toBe(400); // neither
+    expect((await create({ dailyTime: '25:00' })).status).toBe(400); // bad time
+    const daily = (await call('/admin/packages', { token: admin.accessToken })).body.packages.find((p: any) => p.dailyTime === '18:30');
+    const patch = (b: object) => call(`/admin/packages/${daily.id}`, { token: admin.accessToken, method: 'PATCH', body: b });
+    expect((await patch({ drawIntervalMinutes: 15 })).status).toBe(400); // would leave both set
+    expect((await patch({ drawIntervalMinutes: 15, dailyTime: null })).status).toBe(200);
   });
 
   it('results + verify after a draw completes', async () => {
     const u = await register('9000000004');
     const draw = (await call('/packages')).body.packages[0].currentDraw;
     await call(`/draws/${draw.id}/buy`, { token: u.accessToken, body: { random: true } });
-    // fewer than min_tickets(5) -> cancelled+refund; lower the bar to force a win
-    await db.update(draws).set({ drawTime: new Date(Date.now() - 1000), minTickets: 1 }).where((await import('drizzle-orm')).eq(draws.id, draw.id));
+    await db.update(draws).set({ drawTime: new Date(Date.now() - 1000) }).where((await import('drizzle-orm')).eq(draws.id, draw.id));
     await runDueDraws();
     const res = (await call('/results?packageId=1')).body.results;
     expect(res).toHaveLength(1);
@@ -131,5 +177,11 @@ describe('http api', () => {
     const today = new Date().toISOString().slice(0, 10);
     expect((await call(`/results?date=${today}`)).body.results.length).toBe(1);
     expect((await call('/results?date=2001-01-01')).body.results.length).toBe(0);
+
+    const admin = (await call('/auth/login', { body: { mobile: '9999999999', password: 'Admin@12345' } })).body;
+    expect((await call('/admin/winners', { token: u.accessToken })).status).toBe(403);
+    const winners = (await call('/admin/winners', { token: admin.accessToken })).body.winners;
+    expect(winners).toHaveLength(1);
+    expect(winners[0]).toMatchObject({ drawId: draw.id, userId: u.user.id, name: 'Asha', mobile: '9000000004', prizeAmount: 2000, winMethod: 'random' });
   });
 });

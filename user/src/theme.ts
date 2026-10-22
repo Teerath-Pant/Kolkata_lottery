@@ -23,6 +23,8 @@ export const theme = {
     green: { from: '#25a95c', to: '#0a5a2b', soft: '#e7f7ee', text: '#0a5a2b' },
     red: { from: '#e6291f', to: '#8a0c0c', soft: '#fdeaea', text: '#8a0c0c' },
     blue: { from: '#2f64e8', to: '#0a2a84', soft: '#e8efff', text: '#0a2a84' },
+    purple: { from: '#8e3ee0', to: '#4a1587', soft: '#f1e8fd', text: '#4a1587' },
+    pink: { from: '#ec3f9a', to: '#a3125f', soft: '#fde8f3', text: '#a3125f' },
   },
 } as const;
 

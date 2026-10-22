@@ -16,7 +16,6 @@ const schema = z.object({
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
   RUN_CRON: z.string().default('true'),
   SIGNUP_BONUS: z.coerce.number().int().min(0).default(500),
-  DAILY_CLAIM_AMOUNT: z.coerce.number().int().min(0).default(50),
   BUY_CUTOFF_SECONDS: z.coerce.number().int().min(0).default(30),
   BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
   ADMIN_MOBILE: z.string().default('9999999999'),

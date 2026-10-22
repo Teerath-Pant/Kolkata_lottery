@@ -7,7 +7,7 @@ import { notFound } from '../lib/errors';
 import { optionalAuth, requireAuth } from '../middleware';
 import { buyTicket } from '../services/buy';
 import { publicDraw, takenNumbers, verifyData } from '../services/draws';
-import { dailyClaim, walletSummary } from '../services/wallet';
+import { walletSummary } from '../services/wallet';
 
 export const gameRouter = Router();
 const id = z.coerce.number().int().positive();
@@ -69,7 +69,6 @@ gameRouter.get('/me/tickets', requireAuth, async (req, res) => {
 });
 
 gameRouter.get('/me/wallet', requireAuth, async (req, res) => res.json(await walletSummary(req.user!.id)));
-gameRouter.post('/me/daily-claim', requireAuth, async (req, res) => res.json(await dailyClaim(req.user!.id)));
 
 gameRouter.get('/results', async (req, res) => {
   const q = z.object({

@@ -24,13 +24,22 @@ describe('buy ticket transaction', () => {
     expect(await db.select().from(walletLedger)).toHaveLength(1);
   });
 
-  it('race: one user firing 10 parallel buys gets one ticket and is charged once', async () => {
+  it('race: one user firing 10 parallel buys gets 10 distinct tickets and is charged 10 times', async () => {
     const { draw } = await makeDraw({ price: 50 });
     const u = await makeUser(1000);
-    const results = await Promise.allSettled(Array.from({ length: 10 }, () => buyTicket(u.id, draw.id, { random: true })));
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    expect(results.filter((r) => code(r) === 'ALREADY_HAS_TICKET')).toHaveLength(9);
-    expect(await balanceOf(u.id)).toBe(950);
+    const results = await Promise.all(Array.from({ length: 10 }, () => buyTicket(u.id, draw.id, { random: true })));
+    expect(new Set(results.map((r) => r.ticketNo)).size).toBe(10);
+    expect(await balanceOf(u.id)).toBe(500);
+    expect(await db.select().from(walletLedger)).toHaveLength(10);
+  });
+
+  it('a user cannot buy past the wallet balance', async () => {
+    const { draw } = await makeDraw({ price: 50 });
+    const u = await makeUser(120);
+    const results = await Promise.allSettled(Array.from({ length: 5 }, () => buyTicket(u.id, draw.id, { random: true })));
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(2);
+    expect(results.filter((r) => code(r) === 'INSUFFICIENT_COINS')).toHaveLength(3);
+    expect(await balanceOf(u.id)).toBe(20);
   });
 
   it('race: 30 random buyers all get unique numbers', async () => {

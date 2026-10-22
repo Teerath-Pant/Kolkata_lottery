@@ -4,6 +4,7 @@ import { ZodError } from 'zod';
 import { db } from '../db';
 import { users } from '../db/schema';
 import { verifyToken } from '../lib/auth';
+import { assertSameClient, cookieToken } from '../lib/cookies';
 import { AppError } from '../lib/errors';
 
 declare global {
@@ -12,10 +13,16 @@ declare global {
   }
 }
 
-const bearer = (req: Request) => req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null;
+/** Bearer header (API clients) wins; otherwise the httpOnly cookie the browser apps use. */
+function accessToken(req: Request) {
+  if (req.headers.authorization?.startsWith('Bearer ')) return req.headers.authorization.slice(7);
+  const c = cookieToken(req, 'at');
+  if (c) assertSameClient(req);
+  return c;
+}
 
 export function requireAuth(req: Request, _res: Response, next: NextFunction) {
-  const t = bearer(req);
+  const t = accessToken(req);
   if (!t) throw new AppError(401, 'UNAUTHORIZED', 'Login required');
   req.user = verifyToken(t, 'access');
   next();
@@ -23,7 +30,7 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
 
 /** Sets req.user when a valid token is sent, never rejects. */
 export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
-  const t = bearer(req);
+  const t = accessToken(req);
   if (t) { try { req.user = verifyToken(t, 'access'); } catch { /* anonymous */ } }
   next();
 }

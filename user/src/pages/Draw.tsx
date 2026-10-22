@@ -11,7 +11,7 @@ import type { Draw } from '../lib/types';
 import { themeGradient } from '../theme';
 
 const HOW = [
-  'Each draw sells one ticket per player.',
+  'Buy as many tickets as you like, one number per ticket.',
   'Pick a free number from the grid, or tap Random Number and let the server choose.',
   'Tickets cost play coins. Coins have no real-world value and cannot be cashed out.',
   'At draw time the winning ticket is announced and the prize coins are credited automatically.',
@@ -163,11 +163,14 @@ export function DrawPage() {
           <div className="mb-3 text-center text-3xl font-extrabold" style={{ color: col ? col[1] : undefined }}>
             <Coins n={d.ticketPrice} size={26} />
           </div>
-          {open && (d.myTicketNo
-            ? <div className="rounded-btn bg-brand-light py-3 text-center font-bold text-brand-dark">Aapke paas is draw ka ticket #{ticketLabel(d.myTicketNo)} hai.</div>
-            : btnStyle
-              ? <button onClick={() => nav(`/book/${d.id}`)} style={btnStyle} className="w-full rounded-btn py-3 text-lg font-bold text-white active:translate-y-1">Book Now</button>
-              : <Button onClick={() => nav(`/book/${d.id}`)}>Book Now</Button>)}
+          {open && d.myTicketNos.length > 0 && (
+            <div className="mb-3 rounded-btn bg-brand-light py-3 text-center text-sm font-bold text-brand-dark">
+              Your tickets: {d.myTicketNos.map((n) => `#${ticketLabel(n)}`).join(', ')}
+            </div>
+          )}
+          {open && (btnStyle
+            ? <button onClick={() => nav(`/book/${d.id}`)} style={btnStyle} className="w-full rounded-btn py-3 text-lg font-bold text-white active:translate-y-1">{d.myTicketNos.length ? 'Book Another' : 'Book Now'}</button>
+            : <Button onClick={() => nav(`/book/${d.id}`)}>{d.myTicketNos.length ? 'Book Another' : 'Book Now'}</Button>)}
           {!open && <Button onClick={goNext}>Go to next draw</Button>}
         </div>
 
@@ -181,7 +184,7 @@ export function DrawPage() {
         {panel === 'prize' && (
           <div className="space-y-1 rounded-card bg-white p-4 text-sm" style={whiteCard}>
             <p><b>Prize:</b> {d.prizeType === 'fixed' ? <Coins n={d.prizeValue} /> : `${d.prizeValue}% of the ticket pool (now `}{d.prizeType !== 'fixed' && <><Coins n={d.prizeAmount} />)</>}</p>
-            <p><b>Tickets:</b> max {d.maxTickets}, minimum {d.minTickets} needed or the draw is cancelled &amp; refunded.</p>
+            <p><b>Tickets:</b> max {d.maxTickets}. The draw runs even if only one ticket is sold; with no tickets it is skipped.</p>
             <p><b>Winner selection:</b> {d.mode === 'random' ? 'Random (HMAC of a pre-committed server seed).' : 'Chosen by the admin before draw time.'}</p>
             <div className="pt-2 text-[11px] text-muted">
               <div className="font-semibold">Provably fair commitment (SHA-256 of server seed)</div>

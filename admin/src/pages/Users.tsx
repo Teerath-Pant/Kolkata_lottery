@@ -38,8 +38,8 @@ function UserRow({ u }: { u: ManagedUser }) {
   });
   return (
     <Card>
-      <div className="flex items-center justify-between">
-        <b>{u.name} <span className="text-xs font-normal text-muted">({u.role})</span></b>
+      <div className="flex items-center justify-between gap-2">
+        <b className="min-w-0 truncate">{u.name} <span className="text-xs font-normal text-muted">({u.role})</span></b>
         <Coins n={u.balance ?? 0} />
       </div>
       <div className="text-xs text-muted">+{u.mobile} · id {u.id} · joined {fmtDateTime(u.createdAt)}</div>
