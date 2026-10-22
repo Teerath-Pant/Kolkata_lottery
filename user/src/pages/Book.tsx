@@ -9,9 +9,8 @@ import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { fmtDateTime, ticketLabel } from '../lib/time';
 import type { Draw } from '../lib/types';
-import { themeGradient } from '../theme';
+import { DRAW_PACKAGE_COLORS, themeGradient } from '../theme';
 
-const PAGE_SIZE = 100;
 const MAX_QTY = 10;
 
 export function Book() {
@@ -19,11 +18,10 @@ export function Book() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { balance } = useAuth();
-  const [picks, setPicks] = useState<(number | undefined)[]>([]);
+  const [picks, setPicks] = useState<(number | undefined)[]>([undefined]);
   const [quantity, setQuantity] = useState(1);
   const [activePick, setActivePick] = useState(0);
   const [random, setRandom] = useState(false);
-  const [page, setPage] = useState(0);
 
   const draw = useQuery({
     queryKey: ['draw', id],
@@ -32,7 +30,7 @@ export function Book() {
   });
   const tickets = useQuery({
     queryKey: ['taken', id],
-    queryFn: () => api<{ maxTickets: number; taken: number[] }>(`/draws/${id}/tickets`),
+    queryFn: () => api<{ maxTickets: number; taken: number[]; offers: number[] }>(`/draws/${id}/tickets`),
     refetchInterval: 4000,
   });
   const takenNumbers = useMemo(() => new Set(tickets.data?.taken ?? []), [tickets.data?.taken]);
@@ -43,7 +41,7 @@ export function Book() {
     });
   };
   const resetSelection = () => {
-    setPicks([]);
+    setPicks([undefined]);
     setQuantity(1);
     setActivePick(0);
     setRandom(false);
@@ -85,45 +83,63 @@ export function Book() {
   const currentDraw = draw.data;
   const maxTickets = tickets.data.maxTickets;
   const closed = currentDraw.status !== 'open';
+  const packageColors = DRAW_PACKAGE_COLORS[currentDraw.packageName.trim()];
+  const bookingTheme = packageColors
+    ? { background: `linear-gradient(180deg, ${packageColors[0]}, ${packageColors[2]})` }
+    : themeGradient(currentDraw.theme);
+  const selectedStyle = packageColors
+    ? {
+        borderColor: packageColors[2],
+        backgroundColor: `${packageColors[0]}1a`,
+        color: packageColors[2],
+      }
+    : undefined;
+  const selectedNumberStyle = packageColors
+    ? {
+        borderColor: packageColors[2],
+        backgroundColor: packageColors[2],
+        color: '#fff',
+        boxShadow: `0 4px 12px ${packageColors[3]}55`,
+      }
+    : undefined;
   const total = currentDraw.ticketPrice * quantity;
   const insufficientBalance = balance < total;
   const filledPicks = picks.filter((pick): pick is number => pick !== undefined);
   const ready = (random || filledPicks.length === quantity) && !closed && !insufficientBalance;
-  const pageCount = Math.ceil(maxTickets / PAGE_SIZE);
-  const numbers = Array.from(
-    { length: Math.min(PAGE_SIZE, maxTickets - page * PAGE_SIZE) },
-    (_, index) => page * PAGE_SIZE + index + 1,
-  );
+  const offers = tickets.data.offers.filter((number) => !takenNumbers.has(number)).slice(0, 10);
 
   const updateQuantity = (nextQuantity: number) => {
     const next = Math.min(MAX_QTY, Math.max(1, nextQuantity));
-    setPicks((current) => current.slice(0, next));
+    setPicks((current) => Array.from({ length: next }, (_, index) => current[index]));
     setActivePick(next > quantity ? next - 1 : Math.min(activePick, next - 1));
     setQuantity(next);
   };
 
   const togglePick = (number: number) => {
     setRandom(false);
-    const existingIndex = picks.indexOf(number);
+    const nextPicks = Array.from({ length: quantity }, (_, index) => picks[index]);
+    const existingIndex = nextPicks.indexOf(number);
     if (existingIndex === activePick) {
-      setPicks((current) => current.map((pick, index) => index === activePick ? undefined : pick));
+      nextPicks[activePick] = undefined;
+      setPicks(nextPicks);
       return;
     }
     if (existingIndex !== -1) {
       setActivePick(existingIndex);
       return;
     }
-    setPicks((current) => current.map((pick, index) => index === activePick ? number : pick));
-    const nextEmpty = picks.findIndex((pick, index) => index !== activePick && pick === undefined);
+    nextPicks[activePick] = number;
+    setPicks(nextPicks);
+    const nextEmpty = nextPicks.findIndex((pick, index) => index !== activePick && pick === undefined);
     if (nextEmpty !== -1) setActivePick(nextEmpty);
   };
 
   return (
     <div>
-      <PageHeader title="Book Ticket" style={themeGradient(currentDraw.theme)} />
+      <PageHeader title="Book Ticket" style={bookingTheme} />
       <div className="space-y-4 p-4 md:mx-auto md:grid md:max-w-5xl md:grid-cols-[1fr_340px] md:items-start md:gap-6 md:space-y-0 md:px-6 md:pb-12">
         <div className="space-y-4">
-          <Item className="rounded-card p-3 text-white shadow-card md:p-4" style={themeGradient(currentDraw.theme)}>
+          <Item className="rounded-card p-3 text-white shadow-card md:p-4" style={bookingTheme}>
             <div className="flex items-center justify-between">
               <div className="text-lg font-bold">{currentDraw.packageName} Draw</div>
               <ModeBadge mode={currentDraw.mode} />
@@ -153,12 +169,12 @@ export function Book() {
               </h2>
               <span className="shrink-0 text-xs text-muted">{Math.max(0, maxTickets - takenNumbers.size)} of {maxTickets} left</span>
             </div>
-            {numbers.every((number) => takenNumbers.has(number)) ? (
-              <p className="py-6 text-center text-sm font-semibold text-muted">All tickets on this page are sold.</p>
+            {offers.length === 0 ? (
+              <p className="py-6 text-center text-sm font-semibold text-muted">No ticket numbers are currently available.</p>
             ) : (
               <div className="grid grid-cols-5 gap-1.5 min-[380px]:gap-2">
                 <AnimatePresence mode="popLayout" initial={false}>
-                  {numbers.filter((number) => !takenNumbers.has(number)).map((number) => {
+                  {offers.map((number) => {
                     const selected = picks.includes(number) && !random;
                     return (
                       <motion.button
@@ -173,8 +189,11 @@ export function Book() {
                         exit={{ opacity: 0, scale: 0.6 }}
                         transition={{ type: 'spring', stiffness: 500, damping: 24 }}
                         className={`rounded-lg border py-2.5 text-[11px] font-semibold tabular-nums min-[380px]:text-sm disabled:opacity-50 ${
-                          selected ? 'border-bad bg-bad text-white shadow-glow' : 'border-brand/30 bg-white text-brand-dark'
+                          selected
+                            ? packageColors ? 'text-white' : 'border-bad bg-bad text-white shadow-glow'
+                            : 'border-brand/30 bg-white text-brand-dark'
                         }`}
+                        style={selected ? selectedNumberStyle : undefined}
                       >
                         {ticketLabel(number)}
                       </motion.button>
@@ -183,14 +202,6 @@ export function Book() {
                 </AnimatePresence>
               </div>
             )}
-            {pageCount > 1 && (
-              <div className="mt-3 flex items-center justify-center gap-4 text-sm">
-                <button type="button" disabled={page === 0} onClick={() => setPage((current) => current - 1)} className="font-semibold text-brand disabled:opacity-40">Previous</button>
-                <span className="text-xs text-muted">Page {page + 1} of {pageCount}</span>
-                <button type="button" disabled={page + 1 >= pageCount} onClick={() => setPage((current) => current + 1)} className="font-semibold text-brand disabled:opacity-40">Next</button>
-              </div>
-            )}
-            <p className="mt-2 text-center text-[11px] text-muted">Sold numbers are hidden automatically.</p>
           </Item>
         </div>
 
@@ -201,11 +212,16 @@ export function Book() {
             disabled={closed}
             onClick={() => {
               setRandom((current) => !current);
-              setPicks([]);
+              setPicks(Array.from({ length: quantity }, () => undefined));
               setActivePick(0);
             }}
             aria-pressed={random}
-            className={`w-full rounded-btn border-2 py-3 font-semibold ${random ? 'border-bad bg-red-50 text-bad' : 'border-brand/30 bg-white text-brand'} disabled:opacity-50`}
+            className={`w-full rounded-btn border-2 py-3 font-semibold ${
+              random
+                ? packageColors ? '' : 'border-bad bg-red-50 text-bad'
+                : 'border-brand/30 bg-white text-brand'
+            } disabled:opacity-50`}
+            style={random ? selectedStyle : undefined}
           >
             <motion.span
               animate={random ? { rotate: [0, 360] } : { rotate: 0 }}
@@ -228,7 +244,7 @@ export function Book() {
 
           {!random && (
             <Item className="space-y-2 rounded-card bg-white p-4 shadow-card">
-              <div className="text-sm font-semibold">Apne numbers</div>
+              <div className="text-sm font-semibold">Select Your Numbers</div>
               <div className="grid grid-cols-2 gap-2">
                 {Array.from({ length: quantity }, (_, index) => (
                   <button
@@ -236,11 +252,16 @@ export function Book() {
                     type="button"
                     disabled={closed}
                     onClick={() => setActivePick(index)}
-                    className={`rounded-btn border-2 px-3 py-2 text-left ${activePick === index ? 'border-bad bg-red-50' : 'border-brand/30 bg-white'}`}
+                    className={`rounded-btn border-2 px-3 py-2 text-left ${
+                      activePick === index
+                        ? packageColors ? '' : 'border-bad bg-red-50'
+                        : 'border-brand/30 bg-white'
+                    }`}
+                    style={activePick === index ? selectedStyle : undefined}
                   >
                     <div className="text-[10px] text-muted">Ticket {index + 1}</div>
                     <div className="text-base font-extrabold tabular-nums text-brand-dark">
-                      {picks[index] !== undefined ? ticketLabel(picks[index]!) : 'Chuno'}
+                      {picks[index] !== undefined ? ticketLabel(picks[index]!) : 'Select'}
                     </div>
                   </button>
                 ))}
@@ -274,7 +295,6 @@ export function Book() {
           <Button disabled={!ready || booking.isPending} onClick={() => booking.mutate()}>
             {booking.isPending ? 'Booking…' : <>Confirm · <Coins n={total} className="text-white" /></>}
           </Button>
-          <p className="text-center text-[11px] text-muted">Confirming deducts coins from your wallet. Play coins only, no real value.</p>
         </div>
       </div>
     </div>

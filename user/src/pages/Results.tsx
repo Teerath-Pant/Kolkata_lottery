@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Coins, ErrorBox, PageHeader, Spinner } from '../components/ui';
+import { Coins, Card, Empty, ErrorBox, ModeBadge, PageHeader, Spinner } from '../components/ui';
 import { api } from '../lib/api';
-import { ticketLabel } from '../lib/time';
+import { fmtDateTime, ticketLabel } from '../lib/time';
 import type { Draw, Pkg, ResultRow } from '../lib/types';
 import { headerGradient } from '../theme';
 
@@ -14,7 +14,7 @@ const PRIZE_TIERS = ['Grand', 'Mega', 'Special', 'Special', 'Super'];
 const PRIZE_VALUES = [10_000_000, 20_000_000, 500_000, 1_000_000, 2_000_000];
 const EXAMPLE_WINNING_NUMBER = 255133;
 const DIGIT_ROWS = [
-  { label: 'Full Match', sub: '6 Digit', digits: 6, pct: 0.01, bg: 'bg-green-100' },
+  { label: 'Full Match', sub: '5 Digit', digits: 5, pct: 0.01, bg: 'bg-green-100' },
   { label: '4 Digit Match', sub: 'Any 4 digit', digits: 4, pct: 0.001, bg: 'bg-blue-100' },
   { label: '3 Digit Match', sub: 'Any 3 digit', digits: 3, pct: 0.0001, bg: 'bg-purple-100' },
   { label: '2 Digit Match', sub: 'Any 2 digit', digits: 2, pct: 0.00001, bg: 'bg-orange-100' },
@@ -23,8 +23,10 @@ const DIGIT_ROWS = [
 
 export function Results() {
   const [sp, setSp] = useSearchParams();
+  const navigate = useNavigate();
   const drawParam = sp.get('draw') ?? '';
   const packageId = sp.get('packageId') ?? '';
+  const view = sp.get('view') ?? '';
 
   const pkgs = useQuery({ queryKey: ['packages'], queryFn: () => api<{ packages: Pkg[] }>('/packages') });
   const results = useQuery({
@@ -36,7 +38,7 @@ export function Results() {
   const idxOf = (id: number) => Math.max(0, pkgs.data?.packages.findIndex((p) => p.id === id) ?? -1);
   const colorOf = (id: number) => COLORS[idxOf(id) % COLORS.length];
   const latestDrawId = results.data?.results[0]?.drawId;
-  const selectedDrawId = drawParam || (sp.get('view') !== 'soon' && latestDrawId ? String(latestDrawId) : '');
+  const selectedDrawId = drawParam || (!['soon', 'full'].includes(view) && latestDrawId ? String(latestDrawId) : '');
   if (!drawParam && results.isLoading) return <><PageHeader title="Results" back={false} /><Spinner /></>;
   if (!drawParam && results.error) return <><PageHeader title="Results" back={false} /><ErrorBox error={results.error} retry={() => results.refetch()} /></>;
 
@@ -45,13 +47,57 @@ export function Results() {
       <ResultDetail
         id={selectedDrawId}
         colorOf={colorOf}
-        onBack={() => {
-          const next = new URLSearchParams(sp);
-          next.delete('draw');
-          next.set('view', 'soon');
-          setSp(next, { replace: true });
-        }}
+        onBack={() => navigate(-1)}
       />
+    );
+  }
+
+  if (view === 'full') {
+    return (
+      <div>
+        <PageHeader title="Full Results" back={false} />
+        <div className="space-y-3 p-4 md:mx-auto md:max-w-5xl md:px-6">
+          {results.data?.results.length ? (
+            <div className="md:grid md:grid-cols-2 md:gap-x-4">
+              {results.data.results.map((result) => {
+                const color = colorOf(result.packageId);
+                return (
+                  <Link
+                    key={result.drawId}
+                    to={`/results?view=full&draw=${result.drawId}`}
+                    className="block text-left"
+                  >
+                    <Card className="mb-3 flex items-center gap-3 !p-3">
+                      <div
+                        className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl text-white"
+                        style={{ background: color }}
+                      >
+                        <span className="text-lg leading-none">🏆</span>
+                        <span className="mt-0.5 max-w-full truncate px-1 text-[10px] font-bold">{result.packageName}</span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-semibold" style={{ color }}>{result.packageName} Result</div>
+                        <div className="text-xs text-muted">{fmtDateTime(result.drawTime)} · Draw #{result.drawId}</div>
+                        <ModeBadge mode={result.mode} className="mt-1 !bg-brand-light !text-brand-dark" />
+                      </div>
+                      <div className="text-right">
+                        {result.status === 'completed' && result.winningTicketNo !== null ? (
+                          <>
+                            <div className="text-lg font-extrabold tabular-nums" style={{ color }}>
+                              {ticketLabel(result.winningTicketNo)}
+                            </div>
+                            <div className="text-[10px] text-muted"><Coins n={result.prizeAmount ?? 0} size={10} /></div>
+                          </>
+                        ) : <span className="text-xs font-semibold text-muted">Cancelled</span>}
+                      </div>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : <Empty>No results available yet.</Empty>}
+        </div>
+      </div>
     );
   }
 
@@ -68,9 +114,9 @@ export function Results() {
             Results will be available soon.
           </p>
         </div>
-        <Link to="/tickets?tab=results"
+        <Link to="/results?view=full"
           className="block rounded-btn bg-gradient-to-b from-red-500 to-red-700 py-3 text-center font-bold text-white shadow-card">
-          View My Results
+          View Full Results
         </Link>
       </div>
     </div>
@@ -137,23 +183,23 @@ function ResultDetail({
         </div>
 
         {/* Top 5 */}
-        <div className="rounded-card bg-white p-3 shadow-card">
-          <div className="mb-2 flex items-center gap-1 text-sm font-bold text-brand-dark">🏆 Top 5 Prize Details</div>
-          <div className="grid grid-cols-5 gap-0.5 text-center sm:gap-1">
+        <div className="rounded-card border border-blue-100 bg-gradient-to-br from-white via-blue-50 to-indigo-50 p-3 shadow-[0_8px_24px_rgba(30,86,200,0.14)]">
+          <div className="mb-3 flex items-center gap-1 text-sm font-extrabold text-brand-dark">🏆 Top 5 Prize Details</div>
+          <div className="grid grid-cols-5 gap-1 text-center sm:gap-1.5">
             {PRIZE_LABELS.map((l, i) => (
               <button
                 key={l}
                 type="button"
                 onClick={() => setSelectedPrize(i)}
                 aria-pressed={selectedPrize === i}
-                className={`flex h-14 min-w-0 w-full flex-col overflow-hidden rounded-lg border text-center transition ${
-                  selectedPrize === i ? 'border-brand ring-2 ring-brand/30' : 'border-line'
+                className={`flex h-20 min-w-0 w-full flex-col overflow-hidden rounded-lg border text-center shadow-sm transition duration-200 active:scale-95 ${
+                  selectedPrize === i ? 'border-brand ring-2 ring-brand/30 shadow-md' : 'border-white/80 hover:-translate-y-0.5 hover:shadow-md'
                 }`}
               >
-                <div className="flex min-h-6 flex-1 items-center justify-center px-0.5 text-[8px] font-bold leading-tight text-white sm:text-[9px]" style={{ background: COLORS[i] }}>
+                <div className="flex min-h-9 flex-1 items-center justify-center px-0.5 text-[10px] font-extrabold leading-tight text-white sm:text-xs" style={{ background: `linear-gradient(145deg, ${COLORS[i]}, ${COLORS[i]}bb)` }}>
                   {PRIZE_AMOUNTS[i]}
                 </div>
-                <div className="flex flex-1 flex-col items-center justify-center px-0.5 text-[8px] font-extrabold leading-tight sm:text-[9px]">
+                <div className="flex flex-1 flex-col items-center justify-center gap-0.5 bg-white/80 px-0.5 text-[9px] font-extrabold leading-tight sm:text-[10px]">
                   <span>{l}</span>
                   <span className="font-medium text-muted">({PRIZE_TIERS[i]})</span>
                 </div>
@@ -163,8 +209,8 @@ function ResultDetail({
         </div>
 
         {/* Digit match */}
-        <div className="overflow-hidden rounded-card bg-white shadow-card">
-          <div className="px-3 pt-3 text-sm font-bold text-brand-dark">Digit Match Prize</div>
+        <div className="overflow-hidden rounded-card border border-blue-100 bg-white shadow-[0_8px_24px_rgba(30,86,200,0.14)]">
+          <div className="bg-gradient-to-r from-blue-700 to-indigo-600 px-3 py-2 text-sm font-extrabold text-white">Digit Match Prize</div>
           <div className="mt-2 grid grid-cols-[1fr_auto_auto] gap-2 bg-blue-50 px-3 py-1.5 text-[10px] font-bold text-muted">
             <span>Match Type</span><span className="text-right">Winning Amount</span><span className="text-right">Number</span>
           </div>
@@ -180,12 +226,11 @@ function ResultDetail({
               </div>
             </div>
           ))}
-          <p className="px-3 py-2 text-[10px] text-muted">Prize distribution sirf dikhane ke liye hai. Asli payout sirf 1st prize ka hota hai.</p>
         </div>
 
-        <Link to="/tickets?tab=results"
+        <Link to="/results?view=full"
           className="block rounded-btn bg-gradient-to-b from-red-500 to-red-700 py-3 text-center font-bold text-white shadow-card">
-          View My Results
+          View Full Results
         </Link>
       </div>
     </div>

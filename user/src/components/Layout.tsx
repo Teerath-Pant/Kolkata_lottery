@@ -23,8 +23,9 @@ export function Shell({ tabs = true }: { tabs?: boolean }) {
   if (loading) return <Frame><Spinner /></Frame>;
   if (!user) return <Navigate to="/login" state={{ from: loc.pathname + loc.search }} replace />;
   return (
-       <Frame>
+    <Frame>
       <DesktopNav />
+      {tabs && loc.pathname !== '/' && <MobileHeader />}
       <main className={`${tabs ? 'pb-28' : 'pb-8'} md:pb-12`}><Page key={loc.pathname}>{outlet}</Page></main>
       {tabs && <TabBar />}
     </Frame>
@@ -40,6 +41,16 @@ export function Footer({ className = '' }: { className?: string }) {
     <footer className={`px-4 py-3 text-center text-[11px] text-muted ${className}`}>
       {APP_NAME} · {COIN_NOTE}
     </footer>
+  );
+}
+
+function MobileHeader() {
+  return (
+    <header className="px-3 py-2 text-white md:hidden" style={headerGradient}>
+      <Link to="/more" aria-label="Menu" className="inline-block p-2 text-2xl leading-none">
+        ☰
+      </Link>
+    </header>
   );
 }
 
@@ -61,8 +72,7 @@ function DesktopNav() {
           </div>
         </Link>
         <nav className="flex gap-1">
-          {/* "More" lives in the profile chip on desktop */}
-          {TABS.slice(0, -1).map((t) => (
+          {TABS.map((t) => (
             <NavLink key={t.to} to={t.to} end={t.end}>
               {({ isActive }) => (
                 <motion.span whileTap={{ scale: 0.94 }} className={`relative flex items-center gap-2 rounded-pill px-3 py-2 text-sm font-semibold transition-colors lg:px-4 ${isActive ? 'text-brand-dark' : 'text-white/85 hover:text-white'}`}>

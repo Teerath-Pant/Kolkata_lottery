@@ -17,7 +17,7 @@ import {
 import { api } from "../lib/api";
 import { fmtDateTime, ticketLabel } from "../lib/time";
 import type { Draw } from "../lib/types";
-import { themeGradient } from "../theme";
+import { DRAW_PACKAGE_COLORS, themeGradient } from "../theme";
 
 const HOW: [string, string][] = [
   ["Choose a Lottery", "On the Home page, look at different lottery draws (₹1 Crore, ₹2 Crore, etc.) and select the one you want to play."],
@@ -41,14 +41,6 @@ const LABELS = [
 // Card images (user/public/cards/)
 const CARD_IMG = ["/1.png", "/2.png", "/5.png", "/10.png", "/20.png"];
 // [light, dark, button, deep shadow]
-const COLORS: [string, string, string, string][] = [
-  ["#ef4444", "#7f1d1d", "#dc2626", "#7f1d1d"],
-  ["#3b82f6", "#1e3a8a", "#2563eb", "#1e3a8a"],
-  ["#22c55e", "#14532d", "#16a34a", "#14532d"],
-  ["#a855f7", "#4c1d95", "#7c3aed", "#4c1d95"],
-  ["#ec4899", "#831843", "#db2777", "#831843"],
-];
-
 // 3D text (sirf tab use hota hai jab image na ho)
 const bigText: React.CSSProperties = {
   background: "linear-gradient(180deg, #fff3b0 0%, #ffd34d 45%, #e8a200 100%)",
@@ -117,7 +109,7 @@ export function DrawPage() {
 
   const open = d.status === "open";
   const idx = ORDER.indexOf(d.packageName.trim());
-  const col = idx >= 0 ? COLORS[idx] : null;
+  const col = DRAW_PACKAGE_COLORS[d.packageName.trim()] ?? null;
   const label =
     idx >= 0 ? LABELS[idx] : (prizeText(d) ?? "Grand prize").toUpperCase();
   const pageStyle: React.CSSProperties = col
