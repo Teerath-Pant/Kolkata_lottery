@@ -2,20 +2,20 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Item } from '../components/motion';
+import { Item, item as itemV } from '../components/motion';
 import { useToast } from '../components/Toast';
 import { Button, Coins, Countdown, ErrorBox, ModeBadge, PageHeader, Spinner } from '../components/ui';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { fmtDateTime, ticketLabel } from '../lib/time';
 import type { Draw } from '../lib/types';
-import { DRAW_PACKAGE_COLORS, themeGradient } from '../theme';
+import { themeGradient } from '../theme';
 
 const MAX_QTY = 10;
 
 export function Book() {
   const { id } = useParams();
-  const queryClient = useQueryClient();
+  const qc = useQueryClient();
   const toast = useToast();
   const { balance } = useAuth();
   const [picks, setPicks] = useState<(number | undefined)[]>([]);
@@ -28,7 +28,7 @@ export function Book() {
     queryFn: () => api<Draw>(`/draws/${id}`),
     refetchInterval: 5000,
   });
-  const tickets = useQuery({
+  const taken = useQuery({
     queryKey: ['taken', id],
     queryFn: () => api<{ maxTickets: number; taken: number[]; offers: number[] }>(`/draws/${id}/tickets`),
     refetchInterval: 4000,
@@ -71,7 +71,7 @@ export function Book() {
     },
   });
 
-  if (draw.isLoading || tickets.isLoading) return <><PageHeader title="Book Ticket" /><Spinner /></>;
+  if (draw.isLoading || taken.isLoading) return <><PageHeader title="Book Ticket" /><Spinner /></>;
   if (draw.error || !draw.data) return <><PageHeader title="Book Ticket" /><ErrorBox error={draw.error} retry={() => draw.refetch()} /></>;
   const d = draw.data;
   const max = tickets.data?.maxTickets ?? d.maxTickets;
