@@ -58,7 +58,7 @@ export function PackageRow({ pkg, index = 0 }: { pkg: Pkg; index?: number }) {
       </Link>
       {d && (
         <MLink to={`/book/${d.id}`} whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.05 }} className="shrink-0 rounded-btn bg-white/95 px-3 py-2 text-center text-xs font-bold text-ink shadow-card">
-          {d.myTicketNo ? 'Booked ✓' : <>Book<br />Now</>}
+          {d.myTicketNo ? <>Aur<br />Ticket</> : <>Book<br />Now</>}
         </MLink>
       )}
     </motion.div>

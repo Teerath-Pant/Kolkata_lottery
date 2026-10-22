@@ -158,16 +158,19 @@ export function DrawPage() {
         )}
 
         {/* Ticket price + Book Now */}
-                <div className="rounded-card bg-white p-4" style={whiteCard}>
+        <div className="rounded-card bg-white p-4" style={whiteCard}>
           <div className="text-center text-sm font-semibold" style={{ color: col ? col[1] : undefined }}>Ticket Price</div>
           <div className="mb-3 text-center text-3xl font-extrabold" style={{ color: col ? col[1] : undefined }}>
             <Coins n={d.ticketPrice} size={26} />
           </div>
-          {open && (d.myTicketNo
-            ? <div className="rounded-btn bg-brand-light py-3 text-center font-bold text-brand-dark">Aapke paas is draw ka ticket #{ticketLabel(d.myTicketNo)} hai.</div>
-            : btnStyle
-              ? <button onClick={() => nav(`/book/${d.id}`)} style={btnStyle} className="w-full rounded-btn py-3 text-lg font-bold text-white active:translate-y-1">Book Now</button>
-              : <Button onClick={() => nav(`/book/${d.id}`)}>Book Now</Button>)}
+          {open && d.myTicketNo && (
+            <div className="mb-3 rounded-btn bg-brand-light py-2 text-center text-sm font-bold text-brand-dark">
+              Aapke paas is draw ka ticket #{ticketLabel(d.myTicketNo)} hai.
+            </div>
+          )}
+          {open && (btnStyle
+            ? <button onClick={() => nav(`/book/${d.id}`)} style={btnStyle} className="w-full rounded-btn py-3 text-lg font-bold text-white active:translate-y-1">{d.myTicketNo ? 'Aur Ticket Lo' : 'Book Now'}</button>
+            : <Button onClick={() => nav(`/book/${d.id}`)}>{d.myTicketNo ? 'Aur Ticket Lo' : 'Book Now'}</Button>)}
           {!open && <Button onClick={goNext}>Go to next draw</Button>}
         </div>
 
