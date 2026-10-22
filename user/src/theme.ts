@@ -30,6 +30,14 @@ export const theme = {
 
 export type PackageTheme = keyof typeof theme.packages;
 
+export const DRAW_PACKAGE_COLORS: Record<string, readonly [string, string, string, string]> = {
+  '1 करोड़': ['#ef4444', '#7f1d1d', '#dc2626', '#7f1d1d'],
+  '2 करोड़': ['#3b82f6', '#1e3a8a', '#2563eb', '#1e3a8a'],
+  '5 लाख': ['#22c55e', '#14532d', '#16a34a', '#14532d'],
+  '10 लाख': ['#a855f7', '#4c1d95', '#7c3aed', '#4c1d95'],
+  '20 लाख': ['#ec4899', '#831843', '#db2777', '#831843'],
+};
+
 export const themeGradient = (t: PackageTheme) => ({
   background: `linear-gradient(160deg, ${theme.packages[t].from} 0%, ${theme.packages[t].to} 100%)`,
 });

@@ -3,10 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Item, item } from "../components/motion";
 import { Countdown, ErrorBox, Spinner } from "../components/ui";
-import { APP_NAME } from "../config";
-import { Logo } from "../components/Logo";
 import { api } from "../lib/api";
 import type { Pkg } from "../lib/types";
+import { Logo } from "../components/Logo";
 import { headerGradient } from "../theme";
 
 const MLink = motion.create(Link);
@@ -52,17 +51,12 @@ export function Home() {
 
   return (
     <div>
-      {/* Mobile header (PC pe Layout ka nav dikhta hai, isliye yahan md:hidden) */}
       <header
         className="grid grid-cols-3 items-center px-3 py-2 text-white md:hidden"
         style={headerGradient}
       >
         <div className="flex justify-start">
-          <Link
-            to="/more"
-            aria-label="Menu"
-            className="p-2 text-2xl leading-none"
-          >
+          <Link to="/more" aria-label="Menu" className="p-2 text-2xl leading-none">
             ☰
           </Link>
         </div>
@@ -70,16 +64,11 @@ export function Home() {
           <Logo size={64} className="shrink-0" />
         </div>
         <div className="flex justify-end">
-          <button
-            type="button"
-            aria-label="Notifications"
-            className="p-2 text-2xl leading-none"
-          >
+          <button type="button" aria-label="Notifications" className="p-2 text-2xl leading-none">
             🔔
           </button>
         </div>
       </header>
-
       <div className="space-y-3 p-3 md:mx-auto md:max-w-5xl md:space-y-5 md:px-6 md:py-8">
         {/* Banner + countdown */}
 

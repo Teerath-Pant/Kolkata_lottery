@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { motion } from "framer-motion";
 import { Celebration } from "../components/Celebration";
 import { prizeText } from "../components/PackageCard";
 import { useToast } from "../components/Toast";
@@ -16,7 +17,7 @@ import {
 import { api } from "../lib/api";
 import { fmtDateTime, ticketLabel } from "../lib/time";
 import type { Draw } from "../lib/types";
-import { themeGradient } from "../theme";
+import { DRAW_PACKAGE_COLORS, themeGradient } from "../theme";
 
 const HOW = [
   'Buy as many tickets as you like, one number per ticket.',
@@ -39,14 +40,6 @@ const LABELS = [
 // Card images (user/public/cards/)
 const CARD_IMG = ["/1.png", "/2.png", "/5.png", "/10.png", "/20.png"];
 // [light, dark, button, deep shadow]
-const COLORS: [string, string, string, string][] = [
-  ["#ef4444", "#7f1d1d", "#dc2626", "#7f1d1d"],
-  ["#3b82f6", "#1e3a8a", "#2563eb", "#1e3a8a"],
-  ["#22c55e", "#14532d", "#16a34a", "#14532d"],
-  ["#a855f7", "#4c1d95", "#7c3aed", "#4c1d95"],
-  ["#ec4899", "#831843", "#db2777", "#831843"],
-];
-
 // 3D text (sirf tab use hota hai jab image na ho)
 const bigText: React.CSSProperties = {
   background: "linear-gradient(180deg, #fff3b0 0%, #ffd34d 45%, #e8a200 100%)",
@@ -115,11 +108,14 @@ export function DrawPage() {
 
   const open = d.status === "open";
   const idx = ORDER.indexOf(d.packageName.trim());
-  const col = idx >= 0 ? COLORS[idx] : null;
+  const col = DRAW_PACKAGE_COLORS[d.packageName.trim()] ?? null;
   const label =
     idx >= 0 ? LABELS[idx] : (prizeText(d) ?? "Grand prize").toUpperCase();
-  const pageStyle = col
-    ? { background: `linear-gradient(180deg, ${col[0]}, ${col[1]})` }
+  const pageStyle: React.CSSProperties = col
+    ? {
+        backgroundColor: "#090b12",
+        backgroundImage: `radial-gradient(ellipse at 50% 0%, ${col[0]}66 0%, transparent 48%), radial-gradient(ellipse at 100% 38%, ${col[1]} 0%, transparent 42%), linear-gradient(160deg, #191b29 0%, #0b0d15 58%, #07090f 100%)`,
+      }
     : themeGradient(d.theme);
   const btnStyle: React.CSSProperties | undefined = col
     ? {
@@ -174,14 +170,31 @@ export function DrawPage() {
         {/* Prize badge: image (agar naam match kare), warna purana text card */}
         {idx >= 0 ? (
           <div className="text-center text-white">
-            <div className="mx-auto flex h-[280px] items-center justify-center md:h-[330px]">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              whileHover={{ scale: 1.015 }}
+              transition={{ duration: 0.35 }}
+              className="relative flex h-[300px] w-full items-center justify-center overflow-hidden rounded-2xl border p-2 shadow-2xl md:h-[350px]"
+              style={{
+                background: `linear-gradient(145deg, ${col?.[1]}, #101323 55%, ${col?.[3]})`,
+                borderColor: `${col?.[0]}aa`,
+                boxShadow: `0 0 0 1px ${col?.[0]}55, 0 12px 28px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.3)`,
+              }}
+            >
+              <motion.div
+                aria-hidden
+                className="pointer-events-none absolute -inset-y-1/2 left-0 z-10 w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                animate={{ x: ['-180%', '480%'] }}
+                transition={{ duration: 4, repeat: Infinity, repeatDelay: 1, ease: 'linear' }}
+              />
               <img
                 src={CARD_IMG[idx]}
                 alt={`${d.packageName} ${label}`}
-                className="h-full w-auto max-w-full select-none object-contain drop-shadow-2xl"
+                className="relative z-0 h-full w-full select-none object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.55)]"
                 draggable={false}
               />
-            </div>
+            </motion.div>
             <div className="mt-4 text-sm text-white/90">
               Prize:{" "}
               {d.prizeType === "fixed" ? (
@@ -379,9 +392,16 @@ export function DrawPage() {
             className="list-decimal space-y-1 rounded-card bg-white p-4 pl-8 text-sm"
             style={whiteCard}
           >
-            {HOW.map((h) => (
-              <li key={h}>{h}</li>
+            {HOW.map(([title, detail]) => (
+              <li key={title}>
+                <strong>{title}</strong>
+                <br />
+                {detail}
+              </li>
             ))}
+            <li className="mt-2 list-none font-semibold text-bad">
+              🔴 <strong>Note:</strong> Always double-check draw times, ticket prices, and official results. Good luck! 🤞🍀
+            </li>
           </ol>
         )}
       </div>
