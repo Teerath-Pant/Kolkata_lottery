@@ -20,12 +20,34 @@ import type { Draw } from "../lib/types";
 import { DRAW_PACKAGE_COLORS, themeGradient } from "../theme";
 
 const HOW = [
-  'Buy as many tickets as you like, one number per ticket.',
-  'Pick a free number from the grid, or tap Random Number and let the server choose.',
-  'Tickets cost play coins. Coins have no real-world value and cannot be cashed out.',
-  'At draw time the winning ticket is announced and the prize coins are credited automatically.',
-  'The draw mode (Random draw / Admin-selected winner) is shown on this screen. Random draws are provably fair: verify any result on the Verify page.',
-  'If too few tickets are sold, the draw is cancelled and everyone is refunded.',
+  {
+    title: 'Choose a Lottery',
+    detail: 'On the Home page, look at different lottery draws (₹1 Crore, ₹2 Crore, etc.) and select the one you want to play.',
+  },
+  {
+    title: 'Choose Your Ticket Numbers',
+    detail: 'Tap Book Now. Select your lucky numbers manually, or tap Random Number to let the app pick them for you.',
+  },
+  {
+    title: 'Select Ticket Quantity',
+    detail: 'Want more tickets? Tap + to add more or − to reduce the number of tickets.',
+  },
+  {
+    title: 'Pay for Your Tickets',
+    detail: 'Check your numbers, quantity, and total price. Choose a payment method and complete the payment.',
+  },
+  {
+    title: 'View Your Tickets',
+    detail: 'Once the payment is successful, go to My Wallet or My Tickets to see your purchased tickets.',
+  },
+  {
+    title: 'Wait for the Draw',
+    detail: 'Each draw happens after the 45-minute booking window closes. Check the countdown timer on the screen.',
+  },
+  {
+    title: 'Check the Results',
+    detail: 'Go to the Results section. Compare your ticket numbers with the winning numbers to see if you won!',
+  },
 ];
 
 // Sequence (Name admin mein bilkul aise hi hona chahiye)
@@ -392,7 +414,7 @@ export function DrawPage() {
             className="list-decimal space-y-1 rounded-card bg-white p-4 pl-8 text-sm"
             style={whiteCard}
           >
-            {HOW.map(([title, detail]) => (
+            {HOW.map(({ title, detail }) => (
               <li key={title}>
                 <strong>{title}</strong>
                 <br />
