@@ -13,6 +13,7 @@ import { Splash } from './pages/Splash';
 import { Tickets } from './pages/Tickets';
 import { Verify } from './pages/Verify';
 import { Wallet } from './pages/Wallet';
+import { Refer } from './pages/Refer';
 
 export default function App() {
   const [splash, setSplash] = useState(() => sessionStorage.getItem('ltd.splash') !== '1');
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/book/:id" element={<Book />} />
         <Route path="/verify" element={<Verify />} />
         <Route path="/verify/:id" element={<Verify />} />
+        <Route path="/refer" element={<Refer />} />
         <Route path="/help" element={<Help />} />
         <Route path="/settings" element={<Settings />} />
       </Route>

@@ -23,11 +23,9 @@ export function Shell({ tabs = true }: { tabs?: boolean }) {
   if (loading) return <Frame><Spinner /></Frame>;
   if (!user) return <Navigate to="/login" state={{ from: loc.pathname + loc.search }} replace />;
   return (
-    <Frame>
+       <Frame>
       <DesktopNav />
-      <main className="pb-4 md:pb-12"><Page key={loc.pathname}>{outlet}</Page></main>
-      {/* bottom padding keeps the footer clear of the phone tab bar */}
-      <Footer className={`${tabs ? 'pb-28' : 'pb-8'} md:border-t md:border-line md:py-5`} />
+      <main className={`${tabs ? 'pb-28' : 'pb-8'} md:pb-12`}><Page key={loc.pathname}>{outlet}</Page></main>
       {tabs && <TabBar />}
     </Frame>
   );
