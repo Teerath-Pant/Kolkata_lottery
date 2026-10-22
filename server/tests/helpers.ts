@@ -24,11 +24,11 @@ export const balanceOf = async (userId: number) =>
 
 export async function makeDraw(opts: {
   price?: number; prizeType?: 'fixed' | 'pool_percent'; prizeValue?: number;
-  max?: number; min?: number; drawTime?: Date; mode?: 'random' | 'admin_selected';
+  max?: number; drawTime?: Date; mode?: 'random' | 'admin_selected';
 } = {}) {
   const [pkg] = await db.insert(packages).values({
     name: 'Test', price: opts.price ?? 50, prizeType: opts.prizeType ?? 'fixed', prizeValue: opts.prizeValue ?? 1000,
-    maxTickets: opts.max ?? 100, minTickets: opts.min ?? 0, drawIntervalMinutes: 30, theme: 'green',
+    maxTickets: opts.max ?? 100, drawIntervalMinutes: 30, theme: 'green',
   }).returning();
   const draw = await openDraw(db, pkg, opts.drawTime ?? new Date(Date.now() + 3600_000));
   if (opts.mode) await db.update(draws).set({ mode: opts.mode }).where(eq(draws.id, draw.id));

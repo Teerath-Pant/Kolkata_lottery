@@ -35,9 +35,10 @@ export function Tickets() {
           return (
             <Link key={t.ticketId} to={`/draw/${t.drawId}`}>
               <Card className="mb-3 flex items-center gap-3 !p-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-xs font-extrabold text-white min-[380px]:h-14 min-[380px]:w-14 min-[380px]:text-sm"
+                <div className="flex min-h-14 w-[5.25rem] shrink-0 flex-col items-center justify-center rounded-xl px-1 text-white"
                   style={{ background: `linear-gradient(160deg, ${theme.packages[t.theme].from}, ${theme.packages[t.theme].to})` }}>
-                  #{ticketLabel(t.ticketNo)}
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-white/80">Ticket</span>
+                  <span className="text-base font-extrabold leading-tight tabular-nums">{ticketLabel(t.ticketNo)}</span>
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold">{t.packageName}</div>

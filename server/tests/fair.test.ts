@@ -47,7 +47,7 @@ describe('provably fair', () => {
   });
 
   it('seed stays hidden until the draw finishes, then anyone can recompute the result', async () => {
-    const { draw } = await makeDraw({ min: 0, drawTime: new Date(Date.now() - 60_000) });
+    const { draw } = await makeDraw({ drawTime: new Date(Date.now() - 60_000) });
     await sellTickets(draw.id, 50, 12);
     await db.update(draws).set({ status: 'open' }).where(eq(draws.id, draw.id));
 

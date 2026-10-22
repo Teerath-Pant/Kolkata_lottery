@@ -9,23 +9,22 @@ export interface Draw {
   id: number; packageId: number; packageName: string; theme: PackageTheme;
   status: DrawStatus; mode: DrawMode; drawTime: string;
   ticketPrice: number; prizeType: 'fixed' | 'pool_percent'; prizeValue: number; prizeAmount: number;
-  maxTickets: number; minTickets: number; soldCount: number;
+  maxTickets: number; soldCount: number;
   serverSeedHash: string; serverSeed: string | null;
   winningTicketNo: number | null; winMethod: string | null; winnerName: string | null;
-  myTicketNo: number | null; iWon: boolean; serverTime: string;
+  myTicketNos: number[]; iWon: boolean; serverTime: string;
 }
 
 export interface Pkg {
   id: number; name: string; price: number; theme: PackageTheme;
-  prizeType: 'fixed' | 'pool_percent'; prizeValue: number; maxTickets: number; minTickets: number;
-  drawIntervalMinutes: number; isActive: boolean; currentDraw: Draw | null;
+  prizeType: 'fixed' | 'pool_percent'; prizeValue: number; maxTickets: number;
+  drawIntervalMinutes: number | null; dailyTime: string | null; isActive: boolean; currentDraw: Draw | null;
 }
 
 export interface LedgerRow { id: number; amount: number; type: string; refId: number | null; balanceAfter: number; createdAt: string }
 
 export interface WalletInfo {
-  balance: number; winnings: number; bonus: number; dailyClaimAmount: number;
-  canClaim: boolean; nextClaimAt: string | null; recent: LedgerRow[];
+  balance: number; winnings: number; bonus: number; recent: LedgerRow[];
 }
 
 export interface MyTicket {

@@ -4,7 +4,7 @@ import { db } from '../db';
 import { packages } from '../db/schema';
 import { requireAdmin } from '../middleware';
 import {
-  adjustCoins, createPackage, listAudit, listDraws, listUsers, selectWinner, setMode, updatePackage,
+  adjustCoins, createPackage, listAudit, listDraws, listUsers, listWinners, selectWinner, setMode, updatePackage,
 } from '../services/admin';
 
 export const adminRouter = Router();
@@ -17,13 +17,14 @@ const pkgBase = z.object({
   prizeType: z.enum(['fixed', 'pool_percent']),
   prizeValue: z.number().int().positive(),
   maxTickets: z.number().int().min(1).max(9999),
-  minTickets: z.number().int().min(0),
-  drawIntervalMinutes: z.number().int().positive(),
-  theme: z.enum(['green', 'red', 'blue']),
+  // schedule: either an interval in minutes or a daily time in IST, never both (checked below and in updatePackage)
+  drawIntervalMinutes: z.number().int().positive().nullish(),
+  dailyTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Daily time must be HH:MM').nullish(),
+  theme: z.enum(['green', 'red', 'blue', 'purple', 'pink']),
   isActive: z.boolean(),
 });
-const pkgCreate = pkgBase.partial({ isActive: true, minTickets: true })
-  .refine((p) => (p.minTickets ?? 0) <= p.maxTickets, { message: 'minTickets must be <= maxTickets' })
+const pkgCreate = pkgBase.partial({ isActive: true })
+  .refine((p) => (p.drawIntervalMinutes != null) !== (p.dailyTime != null), { message: 'Choose either an interval or a daily time, not both' })
   .refine((p) => p.prizeType !== 'pool_percent' || p.prizeValue <= 100, { message: 'percent prize must be <= 100' });
 
 adminRouter.get('/admin/packages', async (_req, res) => {
@@ -32,7 +33,7 @@ adminRouter.get('/admin/packages', async (_req, res) => {
 
 adminRouter.post('/admin/packages', async (req, res) => {
   const b = pkgCreate.parse(req.body);
-  res.status(201).json(await createPackage(req.user!.id, { ...b, minTickets: b.minTickets ?? 0, isActive: b.isActive ?? true }, req.ip));
+  res.status(201).json(await createPackage(req.user!.id, { ...b, drawIntervalMinutes: b.drawIntervalMinutes ?? null, dailyTime: b.dailyTime ?? null, isActive: b.isActive ?? true }, req.ip));
 });
 
 adminRouter.patch('/admin/packages/:id', async (req, res) => {
@@ -65,4 +66,5 @@ adminRouter.post('/admin/users/:id/adjust-coins', async (req, res) => {
 });
 
 adminRouter.get('/admin/users', async (_req, res) => res.json({ users: await listUsers() }));
+adminRouter.get('/admin/winners', async (_req, res) => res.json({ winners: await listWinners() }));
 adminRouter.get('/admin/audit-log', async (_req, res) => res.json({ log: await listAudit() }));

@@ -2,7 +2,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { Exec, Tx, db } from '../db';
 import { adminAuditLog, draws, packages, tickets, users, wallets } from '../db/schema';
 import { AppError, notFound } from '../lib/errors';
-import { TICKET_MAX, TICKET_MIN, nextDrawTime, openDraw } from './draws';
+import { TICKET_MAX, TICKET_MIN, nextDrawFor, openDraw } from './draws';
 import { applyWallet } from './wallet';
 
 export const audit = (exec: Exec, adminId: number, action: string, drawId: number | null, payload: unknown, ip?: string) =>
@@ -13,7 +13,7 @@ type PkgInput = Omit<typeof packages.$inferInsert, 'id'>;
 export async function createPackage(adminId: number, input: PkgInput, ip?: string, now = new Date()) {
   return db.transaction(async (tx) => {
     const [pkg] = await tx.insert(packages).values(input).returning();
-    if (pkg.isActive) await openDraw(tx, pkg, nextDrawTime(now, pkg.drawIntervalMinutes, now));
+    if (pkg.isActive) await openDraw(tx, pkg, nextDrawFor(pkg, now, now));
     await audit(tx, adminId, 'package_create', null, pkg, ip);
     return pkg;
   });
@@ -23,10 +23,14 @@ export async function updatePackage(adminId: number, id: number, patch: Partial<
   return db.transaction(async (tx) => {
     const [before] = await tx.select().from(packages).where(eq(packages.id, id)).for('update');
     if (!before) throw notFound('Package');
+    const after = { ...before, ...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) };
+    if ((after.drawIntervalMinutes != null) === (after.dailyTime != null)) {
+      throw new AppError(400, 'VALIDATION', 'Choose either an interval or a daily time, not both');
+    }
     const [pkg] = await tx.update(packages).set(patch).where(eq(packages.id, id)).returning();
     // re-activated package with no open draw gets one
     const [open] = await tx.select({ id: draws.id }).from(draws).where(and(eq(draws.packageId, id), eq(draws.status, 'open')));
-    if (pkg.isActive && !open) await openDraw(tx, pkg, nextDrawTime(now, pkg.drawIntervalMinutes, now));
+    if (pkg.isActive && !open) await openDraw(tx, pkg, nextDrawFor(pkg, now, now));
     await audit(tx, adminId, 'package_update', null, { before, patch }, ip);
     return pkg;
   });
@@ -86,6 +90,17 @@ export const listDraws = (opts: { status?: string; packageId?: number; limit: nu
       opts.status ? eq(draws.status, opts.status as any) : undefined,
       opts.packageId ? eq(draws.packageId, opts.packageId) : undefined,
     )).orderBy(desc(draws.drawTime)).limit(opts.limit);
+
+/** One row per completed draw that had a winner, newest first. */
+export const listWinners = (limit = 500) =>
+  db.select({
+    drawId: draws.id, packageName: packages.name, drawTime: draws.drawTime, ticketNo: draws.winningTicketNo,
+    prizeAmount: draws.prizeAmount, winMethod: draws.winMethod,
+    userId: users.id, name: users.name, mobile: users.mobile,
+  }).from(draws)
+    .innerJoin(users, eq(users.id, draws.winnerUserId))
+    .innerJoin(packages, eq(packages.id, draws.packageId))
+    .where(eq(draws.status, 'completed')).orderBy(desc(draws.drawTime)).limit(limit);
 
 export const listAudit = (limit = 200) =>
   db.select().from(adminAuditLog).orderBy(desc(adminAuditLog.createdAt), desc(adminAuditLog.id)).limit(limit);

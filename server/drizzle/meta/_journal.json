@@ -8,6 +8,34 @@
       "when": 1792236789664,
       "tag": "0000_spotty_plazm",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792643525250,
+      "tag": "0001_peaceful_junta",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792643817389,
+      "tag": "0002_yellow_skin",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792645916056,
+      "tag": "0003_lame_bullseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792646337708,
+      "tag": "0004_bright_vin_gonzales",
+      "breakpoints": true
     }
   ]
 }

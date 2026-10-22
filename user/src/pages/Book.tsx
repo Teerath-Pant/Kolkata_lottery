@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Item, item as itemV } from '../components/motion';
@@ -43,10 +43,13 @@ export function Book() {
         headers: { 'Idempotency-Key': idem.current },
       });
     },
-    onSuccess: (done) => {
-      toast(done.length === 1 ? `Ticket #${ticketLabel(done[0])} booked!` : `${done.length} tickets booked!`, 'success');
-      refresh();
-      reset(); // isi page par raho, dobara kharid sakte ho
+    onSuccess: (r) => {
+      toast(`Ticket #${ticketLabel(r.ticketNo)} booked! You can book more.`, 'success');
+      ['me', 'wallet', 'tickets', 'draw', 'taken', 'packages'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      // stay here for the next ticket: it needs a fresh Idempotency-Key, or the server would replay this purchase
+      idem.current = null;
+      setPick(null);
+      setRandom(false);
     },
     onError: (e) => {
       const done = (e as { done?: number[] }).done ?? [];
@@ -63,33 +66,8 @@ export function Book() {
   const max = taken.data?.maxTickets ?? d.maxTickets;
   const sold = taken.data?.taken.length ?? d.soldCount;
   const closed = d.status !== 'open';
-  const total = d.ticketPrice * qty;
-  const poor = balance < total;
-  const locked = closed;
-  const filled = Array.from({ length: qty }, (_, i) => picks[i]).filter((x): x is number => x !== undefined);
-  const ready = (random || filled.length === qty) && !locked && !poor;
-
-  const changeQty = (n: number) => {
-    const v = Math.min(MAX_QTY, Math.max(1, n));
-    setPicks((p) => p.slice(0, v));
-    setActive(v > qty ? v - 1 : Math.min(active, v - 1));
-    setQty(v);
-  };
-
-  const togglePick = (n: number) => {
-    setRandom(false);
-    const at = picks.indexOf(n);
-    if (at === active) {
-      // wahi box ka number dobara dabaya: khali karo
-      setPicks((p) => { const x = [...p]; x[active] = undefined; return x; });
-      return;
-    }
-    if (at !== -1) { setActive(at); return; } // ye number dusre box mein hai, us box par jao
-    setPicks((p) => { const x = [...p]; x[active] = n; return x; });
-    // agle khali box par jao
-    const nextEmpty = Array.from({ length: qty }, (_, i) => i).find((i) => i !== active && picks[i] === undefined);
-    if (nextEmpty !== undefined) setActive(nextEmpty);
-  };
+  const poor = balance < d.ticketPrice;
+  const ready = (random || picked !== null) && !closed && !poor && sold < max;
 
   return (
     <div>
@@ -107,8 +85,7 @@ export function Book() {
           </div>
         </Item>
 
-        {d.myTicketNo && <Item className="rounded-btn bg-brand-light p-3 text-center text-sm font-semibold text-brand-dark">Aapke paas is draw ka ticket #{ticketLabel(d.myTicketNo)} hai. Aur ticket bhi le sakte ho.</Item>}
-        {d.myTicketNo && <Item className="rounded-btn bg-brand-light p-3 text-center text-sm font-semibold text-brand-dark">You already hold ticket #{ticketLabel(d.myTicketNo)} in this draw.</Item>}
+        {d.myTicketNos.length > 0 && <Item className="rounded-btn bg-brand-light p-3 text-center text-sm font-semibold text-brand-dark">You hold {d.myTicketNos.length} ticket{d.myTicketNos.length > 1 ? 's' : ''} in this draw: {d.myTicketNos.map((n) => `#${ticketLabel(n)}`).join(', ')}. You can book more.</Item>}
         {closed && <Item className="rounded-btn bg-red-50 p-3 text-center text-sm font-semibold text-bad">Ticket sales for this draw are closed.</Item>}
         </div>
 
@@ -128,7 +105,7 @@ export function Book() {
                   const sel = picked === n && !random;
                   return (
                     <motion.button
-                      key={n} disabled={closed || !!d.myTicketNo}
+                      key={n} disabled={closed}
                       onClick={() => { setPick(n); setRandom(false); }}
                       aria-pressed={sel}
                       whileTap={{ scale: 0.85 }}
@@ -152,9 +129,7 @@ export function Book() {
         <div className="space-y-4 md:sticky md:top-24 md:[grid-area:actions]">
         <motion.button
           variants={itemV} whileTap={{ scale: 0.96 }}
-          disabled={locked}
-          onClick={() => { setRandom(!random); setPicks([]); setActive(0); }}
-          disabled={closed || !!d.myTicketNo}
+          disabled={closed}
           onClick={() => { setRandom(!random); setPick(null); }}
           aria-pressed={random}
           className={`w-full rounded-btn border-2 py-3 font-semibold ${random ? 'border-bad bg-red-50 text-bad' : 'border-brand/30 bg-white text-brand'} disabled:opacity-50`}
@@ -208,7 +183,7 @@ export function Book() {
           <div className="flex justify-between"><span className="text-muted">Your ticket</span><b>{random ? 'Random (assigned by server)' : picked ? `#${ticketLabel(picked)}` : 'Not selected'}</b></div>
           <div className="flex justify-between"><span className="text-muted">Total (1 ticket)</span><Coins n={d.ticketPrice} /></div>
           <div className="flex justify-between"><span className="text-muted">Your balance</span><Coins n={balance} /></div>
-          <AnimatePresence>{poor && <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden pt-1 text-xs font-semibold text-bad">Not enough coins. Claim your free daily coins in the Wallet.</motion.p>}</AnimatePresence>
+          <AnimatePresence>{poor && <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden pt-1 text-xs font-semibold text-bad">Not enough coins.</motion.p>}</AnimatePresence>
         </Item>
 
         <Button disabled={!ready || buy.isPending} onClick={() => buy.mutate()}>

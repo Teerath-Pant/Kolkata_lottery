@@ -13,7 +13,7 @@ export async function openDraw(tx: Exec, pkg: Pkg, drawTime: Date) {
   const [d] = await tx.insert(draws).values({
     packageId: pkg.id, drawTime, status: 'open', mode: 'random',
     ticketPrice: pkg.price, prizeType: pkg.prizeType, prizeValue: pkg.prizeValue,
-    maxTickets: pkg.maxTickets, minTickets: pkg.minTickets,
+    maxTickets: pkg.maxTickets,
     serverSeed: seed, serverSeedHash: sha256(seed),
   }).returning();
   return d;
@@ -25,6 +25,24 @@ export function nextDrawTime(anchor: Date, intervalMinutes: number, after: Date)
   let t = anchor.getTime() + step;
   if (t <= after.getTime()) t += Math.ceil((after.getTime() - t + 1) / step) * step;
   return new Date(t);
+}
+
+const IST_OFFSET_MS = 330 * 60_000; // daily draw times are Indian Standard Time: UTC+5:30, no DST
+const DAY_MS = 86_400_000;
+
+/**
+ * Next draw time for a package: the next daily HH:MM (IST) strictly after `after`,
+ * or, for interval packages, the next slot on the interval grid anchored at `anchor`.
+ */
+export function nextDrawFor(pkg: Pick<Pkg, 'drawIntervalMinutes' | 'dailyTime'>, anchor: Date, after: Date) {
+  if (pkg.dailyTime) {
+    const [h, m] = pkg.dailyTime.split(':').map(Number);
+    const istDayStart = Math.floor((after.getTime() + IST_OFFSET_MS) / DAY_MS) * DAY_MS;
+    let t = istDayStart + (h * 60 + m) * 60_000 - IST_OFFSET_MS;
+    if (t <= after.getTime()) t += DAY_MS;
+    return new Date(t);
+  }
+  return nextDrawTime(anchor, pkg.drawIntervalMinutes!, after);
 }
 
 export const computePrize = (d: Pick<Draw, 'prizeType' | 'prizeValue' | 'ticketPrice'>, sold: number) =>
@@ -44,23 +62,21 @@ export async function publicDraw(drawId: number, viewerId?: number) {
     const [u] = await db.select({ name: users.name }).from(users).where(eq(users.id, d.winnerUserId));
     winnerName = u ? maskName(u.name) : null;
   }
-  let myTicketNo: number | null = null;
-  if (viewerId) {
-    const [t] = await db.select({ n: tickets.ticketNo }).from(tickets)
-      .where(and(eq(tickets.drawId, d.id), eq(tickets.userId, viewerId)));
-    myTicketNo = t?.n ?? null;
-  }
+  const myTicketNos = viewerId
+    ? (await db.select({ n: tickets.ticketNo }).from(tickets)
+      .where(and(eq(tickets.drawId, d.id), eq(tickets.userId, viewerId))).orderBy(asc(tickets.ticketNo))).map((t) => t.n)
+    : [];
   const finished = d.status === 'completed' || d.status === 'cancelled';
   return {
     id: d.id, packageId: d.packageId, packageName: p.name, theme: p.theme,
     status: d.status, mode: d.mode, drawTime: d.drawTime,
     ticketPrice: d.ticketPrice, prizeType: d.prizeType, prizeValue: d.prizeValue,
     prizeAmount: d.prizeAmount ?? computePrize(d, sold),
-    maxTickets: d.maxTickets, minTickets: d.minTickets, soldCount: sold,
+    maxTickets: d.maxTickets, soldCount: sold,
     serverSeedHash: d.serverSeedHash,
     serverSeed: finished ? d.serverSeed : null,
     winningTicketNo: d.winningTicketNo, winMethod: d.winMethod, winnerName,
-    myTicketNo, iWon: !!viewerId && d.winnerUserId === viewerId,
+    myTicketNos, iWon: !!viewerId && d.winnerUserId === viewerId,
     serverTime: new Date().toISOString(),
   };
 }
