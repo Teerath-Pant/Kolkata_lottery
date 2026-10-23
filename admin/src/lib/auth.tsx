@@ -6,7 +6,7 @@ import type { AdminUserInfo } from './types';
 interface AuthCtx {
   admin: AdminUserInfo | null;
   loading: boolean;
-  login: (mobile: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -24,8 +24,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthCtx = {
     admin: user?.role === 'admin' ? user : null,
     loading: me.isLoading,
-    login: async (mobile, password) => {
-      const r = await api<{ user: AdminUserInfo }>('/auth/login', { body: { mobile, password } });
+    login: async (username, password) => {
+      const r = await api<{ user: AdminUserInfo }>('/auth/login', { body: { username, password } });
       if (r.user.role !== 'admin') { await logoutRequest(); throw new Error('This account is not an admin'); }
       await qc.fetchQuery({ queryKey: ['me'], queryFn: fetchMe, staleTime: 0 });
     },

@@ -3,6 +3,9 @@ import { Exec, Tx, db } from '../db';
 import { walletLedger, wallets } from '../db/schema';
 import { AppError } from '../lib/errors';
 
+/** Far below 2^53, so balances and ledger sums stay exact as JS numbers. */
+export const MAX_BALANCE = 1_000_000_000_000;
+
 type LedgerType = typeof walletLedger.$inferInsert['type'];
 
 export const lockWallet = async (tx: Tx, userId: number) => {
@@ -16,6 +19,7 @@ export async function applyWallet(tx: Tx, userId: number, amount: number, type: 
   const w = await lockWallet(tx, userId);
   const balanceAfter = w.balance + amount;
   if (balanceAfter < 0) throw new AppError(402, 'INSUFFICIENT_COINS', 'Not enough coins');
+  if (balanceAfter > MAX_BALANCE) throw new AppError(400, 'BALANCE_LIMIT', 'Wallet balance limit exceeded');
   await tx.update(wallets).set({ balance: balanceAfter, updatedAt: new Date() }).where(eq(wallets.userId, userId));
   await tx.insert(walletLedger).values({ userId, amount, type, refId: refId ?? null, balanceAfter });
   return balanceAfter;

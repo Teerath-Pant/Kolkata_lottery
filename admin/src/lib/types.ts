@@ -1,7 +1,7 @@
 export type DrawMode = 'random' | 'admin_selected';
 export type DrawStatus = 'open' | 'drawing' | 'completed' | 'cancelled';
 
-export interface AdminUserInfo { id: number; mobile: string; name: string; role: 'user' | 'admin' }
+export interface AdminUserInfo { id: number; username: string; name: string; role: 'user' | 'admin' }
 
 export interface AdminDraw {
   id: number; packageId: number; packageName: string; status: DrawStatus; mode: DrawMode; drawTime: string;
@@ -11,12 +11,14 @@ export interface AdminDraw {
 export interface AdminPkg {
   id: number; name: string; price: number; prizeType: 'fixed' | 'pool_percent'; prizeValue: number; maxTickets: number;
   drawIntervalMinutes: number | null; dailyTime: string | null; theme: 'green' | 'red' | 'blue' | 'purple' | 'pink'; isActive: boolean;
+  /** coins paid for 1..5 matching leading digits of the winning number (0 = tier off) */
+  tierPrizes?: Record<number, number>;
 }
 
-export interface ManagedUser { id: number; mobile: string; name: string; role: string; balance: number | null; createdAt: string }
+export interface ManagedUser { id: number; username: string; name: string; role: string; balance: number | null; createdAt: string }
 
 export interface WinnerRow {
   drawId: number; packageName: string; drawTime: string; ticketNo: number | null; prizeAmount: number | null; winMethod: string | null;
-  userId: number; name: string; mobile: string;
+  userId: number; name: string; username: string;
 }
 export interface AuditRow { id: number; adminId: number | null; action: string; drawId: number | null; payload: unknown; ip: string | null; createdAt: string }

@@ -12,15 +12,22 @@ import { gameRouter } from './routes/game';
 
 export function createApp() {
   const app = express();
-  app.set('trust proxy', 1);
+  // Only trust X-Forwarded-For when told how many proxies sit in front (TRUST_PROXY); otherwise clients could fake their IP.
+  app.set('trust proxy', config.TRUST_PROXY);
   app.use(helmet());
   app.use(cors({ origin: corsOrigins, credentials: true }));
   app.use(express.json({ limit: '50kb' }));
 
   const test = config.NODE_ENV === 'test';
   const api = express.Router();
-  api.use(rateLimit({ windowMs: 60_000, limit: test ? 100_000 : 300, standardHeaders: true, legacyHeaders: false }));
-  api.use(['/auth/login', '/auth/register'], rateLimit({ windowMs: 15 * 60_000, limit: test ? 100_000 : 30, standardHeaders: true, legacyHeaders: false }));
+  const limiter = (windowMs: number, limit: number) => rateLimit({
+    windowMs, limit: test ? 100_000 : limit, standardHeaders: true, legacyHeaders: false,
+    validate: { xForwardedForHeader: config.NODE_ENV === 'production' }, // behind the Vite dev proxy the header is always present
+  });
+  api.use(limiter(60_000, 300));
+  api.use(['/auth/login', '/auth/register'], limiter(15 * 60_000, 30));
+  api.use('/auth/otp/request', limiter(15 * 60_000, 10)); // SMS costs money: tight per-IP cap on top of the per-number limits
+  api.use('/auth/refresh', limiter(15 * 60_000, 120));
   api.get('/health', (_req, res) => res.json({ ok: true }));
   api.use(authRouter, gameRouter, adminRouter);
   app.use('/api/v1', api);

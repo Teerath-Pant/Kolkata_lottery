@@ -1,13 +1,16 @@
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Card, Empty, ErrorBox, ModeBadge, PageHeader, Spinner } from '../components/ui';
+import { Card, Empty, ErrorBox, PageHeader, Spinner } from '../components/ui';
+import { TicketCard } from '../components/TicketCard';
 import { api } from '../lib/api';
-import { ticketLabel } from '../lib/time';
+import { useAuth } from '../lib/auth';
+import { fmtDateTime, ticketLabel } from '../lib/time';
 import type { MyTicket } from '../lib/types';
 import { theme } from '../theme';
 
 export function Tickets() {
   const [sp] = useSearchParams();
+  const { user: me } = useAuth();
   const tab = sp.get('tab') === 'results' ? 'results' : 'all';
   const q = useQuery({ queryKey: ['tickets'], queryFn: () => api<{ tickets: MyTicket[] }>('/me/tickets'), refetchInterval: 8000 });
   const rows = (q.data?.tickets ?? []).filter((t) => tab === 'all' || t.status === 'completed' || t.status === 'cancelled');
@@ -24,42 +27,44 @@ export function Tickets() {
       <div className="space-y-3 p-4 md:mx-auto md:max-w-5xl md:px-6">
         {q.isLoading ? <Spinner /> : q.error ? <ErrorBox error={q.error} retry={() => q.refetch()} /> : rows.length === 0 ? (
           <Empty>{tab === 'all' ? 'No tickets yet. Pick a draw on Home and book your lucky number.' : 'No finished draws yet.'}</Empty>
-        ) : <div className="space-y-3 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">{groups.map((tickets) => {
+        ) : <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{groups.map((tickets) => {
           const draw = tickets[0];
           const done = draw.status === 'completed';
           const cancelled = draw.status === 'cancelled';
           const won = tickets.some((ticket) => ticket.won);
+          const tier = tickets.find((ticket) => ticket.tierPrize);
+          const g = theme.packages[draw.theme];
           return (
-            <Link key={draw.drawId} to={`/draw/${draw.drawId}`}>
-              <Card className="mb-3 flex items-center gap-3 !p-3">
-                <div className="flex min-h-14 w-[5.25rem] shrink-0 flex-col items-center justify-center rounded-xl px-1 text-white"
-                  style={{ background: `linear-gradient(160deg, ${theme.packages[draw.theme].from}, ${theme.packages[draw.theme].to})` }}>
-                  <span className="max-w-full truncate text-[11px] font-semibold uppercase tracking-wider text-white/80" title={draw.packageName}>{draw.packageName}</span>
-                  <span className="text-sm font-extrabold leading-tight tabular-nums">{tickets.length} {tickets.length === 1 ? 'ticket' : 'tickets'}</span>
-                </div>
-                <div className="space-y-2.5 p-3">
-                  <ModeBadge mode={draw.mode} className="!bg-brand-light !text-brand-dark" />
-                  <div className="rounded-xl border border-line bg-slate-50 p-2.5">
-                    <div className="mb-1.5 text-[11px] font-semibold text-muted">Your ticket numbers ({tickets.length})</div>
-                    <div className="flex flex-wrap gap-1.5">
-                    {tickets.map((ticket) => (
-                      <span
-                        key={ticket.ticketId}
-                        className={`min-w-[4.5rem] rounded-lg border px-2 py-1.5 text-center text-xs font-extrabold tabular-nums shadow-sm ${
-                          ticket.won ? 'bg-green-100 text-green-800' : cancelled ? 'bg-gray-100 text-gray-600' : 'bg-blue-100 text-blue-900'
-                        }`}
-                      >
-                        {ticket.won ? '🏆 ' : ''}{ticketLabel(ticket.ticketNo)}
-                      </span>
-                    ))}
-                    </div>
+            <Link key={draw.drawId} to={`/draw/${draw.drawId}`} className="block">
+              <Card className="overflow-hidden !p-0 transition-shadow hover:shadow-lg">
+                <div className="flex items-center justify-between gap-3 px-4 py-3 text-white" style={{ background: `linear-gradient(160deg, ${g.from}, ${g.to})` }}>
+                  <div className="min-w-0">
+                    <div className="truncate text-base font-extrabold">{draw.packageName}</div>
+                    <div className="text-[11px] text-white/80">{fmtDateTime(draw.drawTime)}</div>
                   </div>
-                  <div className={`text-xs font-semibold ${won ? 'text-good' : cancelled ? 'text-muted' : done ? 'text-muted' : 'text-brand'}`}>
+                  <div className="shrink-0 rounded-full bg-white/20 px-3 py-1 text-xs font-bold">{tickets.length} {tickets.length === 1 ? 'ticket' : 'tickets'}</div>
+                </div>
+                <div className="space-y-3 p-4">
+                  <div className="space-y-2">
+                    {tickets.map((ticket) => (
+                      <TicketCard
+                        key={ticket.ticketId}
+                        ticketNo={ticket.ticketNo}
+                        drawTime={ticket.drawTime}
+                        userName={me?.name}
+                        ticketPrice={ticket.price}
+                        qrValue={`${location.origin}/verify/${ticket.drawId}?t=${ticketLabel(ticket.ticketNo)}`}
+                      />
+                    ))}
+                  </div>
+                  <div className={`border-t border-line pt-2.5 text-sm font-bold ${won || tier ? 'text-good' : cancelled || done ? 'text-muted' : 'text-brand'}`}>
                     {won
-                      ? `Won · ${tickets.find((ticket) => ticket.won)?.prizeAmount?.toLocaleString('en-IN') ?? 0} coins`
+                      ? `🎉 Won · ${tickets.find((ticket) => ticket.won)?.prizeAmount?.toLocaleString('en-IN') ?? 0} coins`
+                      : tier
+                        ? `🎉 ${tier.matchDigits}-digit match · ${tier.tierPrize!.toLocaleString('en-IN')} coins`
                       : done
                         ? `Not won${draw.winningTicketNo !== null ? ` · Winning #${ticketLabel(draw.winningTicketNo)}` : ''}`
-                        : cancelled ? 'Cancelled · Refunded' : 'Booked · Draw pending'}
+                        : cancelled ? 'Cancelled · Refunded' : `Booked · Draw pending · Open till ${fmtDateTime(draw.drawTime)}`}
                   </div>
                 </div>
               </Card>

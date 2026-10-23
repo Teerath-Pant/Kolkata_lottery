@@ -12,10 +12,10 @@ export function Users() {
   const q = useQuery({ queryKey: ['admin-users'], queryFn: () => api<{ users: ManagedUser[] }>('/admin/users') });
   return (
     <div className="space-y-3">
-      <input className={`${field} md:!w-72`} placeholder="Search name or mobile" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <input className={`${field} md:!w-72`} placeholder="Search name or user ID" value={search} onChange={(e) => setSearch(e.target.value)} />
       <Load q={q}>{(d) => {
         const s = search.trim().toLowerCase();
-        const rows = d.users.filter((u) => !s || u.name.toLowerCase().includes(s) || u.mobile.includes(s));
+        const rows = d.users.filter((u) => !s || u.name.toLowerCase().includes(s) || u.username.includes(s));
         return <div className="grid gap-3 md:grid-cols-2">{rows.map((u) => <UserRow key={u.id} u={u} />)}</div>;
       }}</Load>
       <p className="text-center text-[11px] text-muted">Showing the 100 newest users.</p>
@@ -42,7 +42,7 @@ function UserRow({ u }: { u: ManagedUser }) {
         <b className="min-w-0 truncate">{u.name} <span className="text-xs font-normal text-muted">({u.role})</span></b>
         <Coins n={u.balance ?? 0} />
       </div>
-      <div className="text-xs text-muted">+{u.mobile} · id {u.id} · joined {fmtDateTime(u.createdAt)}</div>
+      <div className="text-xs text-muted">{u.username} · id {u.id} · joined {fmtDateTime(u.createdAt)}</div>
       <form className="mt-2 flex flex-wrap gap-2 min-[420px]:flex-nowrap" onSubmit={(e) => { e.preventDefault(); adj.mutate(); }}>
         <input className={`${field} !w-24 shrink-0`} type="number" placeholder="± coins" value={amount} onChange={(e) => setAmount(e.target.value)} required />
         <input className={`${field} min-w-0 flex-1`} placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} required minLength={3} />

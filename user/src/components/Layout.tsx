@@ -2,6 +2,8 @@ import { Link, NavLink, Navigate, useLocation, useOutlet } from 'react-router-do
 import { motion } from 'framer-motion';
 import { CountUp, Page } from './motion';
 import { Logo } from './Logo';
+import { Sidebar } from './Sidebar';
+import { SidebarProvider } from './sidebarContext';
 import { APP_NAME, COIN_NOTE, TAGLINE } from '../config';
 import { useAuth } from '../lib/auth';
 import { headerGradient } from '../theme';
@@ -23,12 +25,14 @@ export function Shell({ tabs = true }: { tabs?: boolean }) {
   if (loading) return <Frame><Spinner /></Frame>;
   if (!user) return <Navigate to="/login" state={{ from: loc.pathname + loc.search }} replace />;
   return (
-    <Frame>
-      <DesktopNav />
-      {tabs && loc.pathname !== '/' && <MobileHeader />}
-      <main className={`${tabs ? 'pb-28' : 'pb-8'} md:pb-12`}><Page key={loc.pathname}>{outlet}</Page></main>
-      {tabs && <TabBar />}
-    </Frame>
+    <SidebarProvider>
+      <Frame>
+        <DesktopNav />
+        <main className={`${tabs ? 'pb-28' : 'pb-8'} md:pb-12`}><Page key={loc.pathname}>{outlet}</Page></main>
+        {tabs && <TabBar />}
+        <Sidebar />
+      </Frame>
+    </SidebarProvider>
   );
 }
 
@@ -41,16 +45,6 @@ export function Footer({ className = '' }: { className?: string }) {
     <footer className={`px-4 py-3 text-center text-[11px] text-muted ${className}`}>
       {APP_NAME} · {COIN_NOTE}
     </footer>
-  );
-}
-
-function MobileHeader() {
-  return (
-    <header className="px-3 py-2 text-white md:hidden" style={headerGradient}>
-      <Link to="/more" aria-label="Menu" className="inline-block p-2 text-2xl leading-none">
-        ☰
-      </Link>
-    </header>
   );
 }
 

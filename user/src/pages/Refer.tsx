@@ -8,7 +8,7 @@ export function Refer() {
   const toast = useToast();
 
   // Abhi UI-only: asli referral code backend se aayega. Tab tak mobile se banaya hua code dikhega.
-  const mobile = String((user as { mobile?: string } | null)?.mobile ?? '');
+  const mobile = user?.username ?? '';
   const code = `LTD${mobile.slice(-6) || '000000'}`;
   const msg = `Join ${APP_NAME} and get bonus coins! Use my referral code: ${code}\n${window.location.origin}`;
 

@@ -7,8 +7,8 @@ interface AuthCtx {
   user: User | null;
   balance: number;
   loading: boolean;
-  login: (mobile: string, password: string) => Promise<void>;
-  register: (mobile: string, name: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
+  register: (b: { username: string; name: string; phone: string; otp: string; password: string }) => Promise<void>;
   logout: () => void;
 }
 
@@ -33,8 +33,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user: me.data?.user ?? null,
     balance: me.data?.balance ?? 0,
     loading: me.isLoading,
-    login: async (mobile, password) => { await api('/auth/login', { body: { mobile, password } }); await afterAuth(); },
-    register: async (mobile, name, password) => { await api('/auth/register', { body: { mobile, name, password } }); await afterAuth(); },
+    login: async (username, password) => { await api('/auth/login', { body: { username, password } }); await afterAuth(); },
+    register: async (b) => { await api('/auth/register', { body: b }); await afterAuth(); },
     logout: () => { api('/auth/logout', { method: 'POST' }).catch(() => undefined).finally(() => { qc.clear(); window.location.assign('/login'); }); },
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

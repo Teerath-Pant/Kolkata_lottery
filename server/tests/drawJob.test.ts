@@ -1,7 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '../src/db';
-import { adminAuditLog, draws, packages, walletLedger } from '../src/db/schema';
+import { adminAuditLog, drawTierPrizes, drawTierWinners, draws, packages, tickets, walletLedger } from '../src/db/schema';
+import { prefixMatch } from '../src/lib/tiers';
 import { nextDrawFor } from '../src/services/draws';
 import { executeDraw, runDueDraws } from '../src/services/drawJob';
 import { selectWinner, setMode } from '../src/services/admin';
@@ -118,5 +119,56 @@ describe('draw job', () => {
     const log = await db.select().from(adminAuditLog);
     expect(log.map((l) => l.action)).toEqual(['set_mode', 'select_winner']);
     expect(log[0].ip).toBe('1.2.3.4');
+  });
+
+  it('leading-digit consolation prizes: best prefix match per ticket, admin-set amounts, paid once', async () => {
+    const { draw } = await makeDraw({ mode: 'admin_selected', prizeValue: 1000, drawTime: past() });
+    await db.update(draws).set({ selectedTicketNo: 123456 }).where(eq(draws.id, draw.id));
+    await db.insert(drawTierPrizes).values([
+      { drawId: draw.id, matchDigits: 1, prize: 5 }, { drawId: draw.id, matchDigits: 2, prize: 25 },
+      { drawId: draw.id, matchDigits: 3, prize: 100 }, { drawId: draw.id, matchDigits: 4, prize: 500 },
+      { drawId: draw.id, matchDigits: 5, prize: 2000 },
+    ]);
+    const nos = { win: 123456, k5: 123450, k4: 123499, k2: 129999, k1: 199999, none: 923456 };
+    const who: Record<string, { id: number }> = {};
+    for (const [name, ticketNo] of Object.entries(nos)) {
+      who[name] = await makeUser(1000);
+      await db.insert(tickets).values({ drawId: draw.id, userId: who[name].id, ticketNo });
+    }
+
+    await Promise.all([executeDraw(draw.id), executeDraw(draw.id)]);
+    await executeDraw(draw.id);
+
+    expect(await balanceOf(who.win.id)).toBe(1000 + 1000);
+    expect(await balanceOf(who.k5.id)).toBe(1000 + 2000);
+    expect(await balanceOf(who.k4.id)).toBe(1000 + 500);
+    expect(await balanceOf(who.k2.id)).toBe(1000 + 25);
+    expect(await balanceOf(who.k1.id)).toBe(1000 + 5);
+    expect(await balanceOf(who.none.id)).toBe(1000);
+    expect(await db.select().from(walletLedger).where(eq(walletLedger.type, 'prize'))).toHaveLength(5);
+    const tw = await db.select().from(drawTierWinners).where(eq(drawTierWinners.drawId, draw.id));
+    expect(tw.map((t) => [t.ticketNo, t.matchDigits, t.prize]).sort()).toEqual([
+      [123450, 5, 2000], [123499, 4, 500], [129999, 2, 25], [199999, 1, 5],
+    ].sort());
+  });
+
+  it('a tier with prize 0 (or missing) pays nothing', async () => {
+    const { draw } = await makeDraw({ mode: 'admin_selected', drawTime: past() });
+    await db.update(draws).set({ selectedTicketNo: 123456 }).where(eq(draws.id, draw.id));
+    await db.insert(drawTierPrizes).values({ drawId: draw.id, matchDigits: 1, prize: 0 });
+    const u = await makeUser(1000);
+    await db.insert(tickets).values({ drawId: draw.id, userId: u.id, ticketNo: 199999 });
+    const w = await makeUser(1000);
+    await db.insert(tickets).values({ drawId: draw.id, userId: w.id, ticketNo: 123456 });
+    await executeDraw(draw.id);
+    expect(await balanceOf(u.id)).toBe(1000);
+    expect(await db.select().from(drawTierWinners)).toHaveLength(0);
+  });
+
+  it('prefixMatch counts unbroken leading digits only', () => {
+    expect(prefixMatch(123456, 123456)).toBe(6);
+    expect(prefixMatch(123456, 123450)).toBe(5);
+    expect(prefixMatch(123456, 193456)).toBe(1); // later digits match but the run is broken
+    expect(prefixMatch(123456, 923456)).toBe(0);
   });
 });
