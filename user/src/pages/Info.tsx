@@ -36,7 +36,7 @@ export function Settings() {
         <Card>
           <div className="text-xs text-muted">Account</div>
           <div className="font-semibold">{user?.name}</div>
-          <div className="text-sm text-muted">+{user?.mobile}</div>
+          <div className="text-sm text-muted">{user?.username}</div>
         </Card>
         <Card className="flex items-center justify-between">
           <div><div className="font-semibold">Reduce celebration effects</div><div className="text-xs text-muted">Saved on this device</div></div>

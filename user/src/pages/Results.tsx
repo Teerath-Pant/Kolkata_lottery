@@ -1,25 +1,17 @@
-import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Coins, Card, Empty, ErrorBox, ModeBadge, PageHeader, Spinner } from '../components/ui';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { Coins, Card, Countdown, Empty, ErrorBox, PageHeader, Spinner } from '../components/ui';
+import { TicketCard } from '../components/TicketCard';
 import { api } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { fmtDateTime, ticketLabel } from '../lib/time';
 import type { Draw, Pkg, ResultRow } from '../lib/types';
-import { headerGradient } from '../theme';
+import { headerGradient, themeGradient } from '../theme';
 
 const COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#a855f7', '#ec4899'];
-const PRIZE_LABELS = ['1st Prize', '2nd Prize', '3rd Prize', '4th Prize', '5th Prize'];
-const PRIZE_AMOUNTS = ['₹1 करोड़', '₹2 करोड़', '₹5 लाख', '₹10 लाख', '₹20 लाख'];
-const PRIZE_TIERS = ['Grand', 'Mega', 'Special', 'Special', 'Super'];
-const PRIZE_VALUES = [10_000_000, 20_000_000, 500_000, 1_000_000, 2_000_000];
-const EXAMPLE_WINNING_NUMBER = 255133;
-const DIGIT_ROWS = [
-  { label: 'Full Match', sub: '5 Digit', digits: 5, pct: 0.01, bg: 'bg-green-100' },
-  { label: '4 Digit Match', sub: 'Any 4 digit', digits: 4, pct: 0.001, bg: 'bg-blue-100' },
-  { label: '3 Digit Match', sub: 'Any 3 digit', digits: 3, pct: 0.0001, bg: 'bg-purple-100' },
-  { label: '2 Digit Match', sub: 'Any 2 digit', digits: 2, pct: 0.00001, bg: 'bg-orange-100' },
-  { label: '1 Digit Match', sub: 'Last digit', digits: 1, pct: 0.000001, bg: 'bg-pink-100' },
-];
+const TIER_BG: Record<number, string> = {
+  6: 'bg-green-100', 5: 'bg-blue-100', 4: 'bg-purple-100', 3: 'bg-orange-100', 2: 'bg-pink-100', 1: 'bg-yellow-100',
+};
 
 export function Results() {
   const [sp, setSp] = useSearchParams();
@@ -28,7 +20,10 @@ export function Results() {
   const packageId = sp.get('packageId') ?? '';
   const view = sp.get('view') ?? '';
 
-  const pkgs = useQuery({ queryKey: ['packages'], queryFn: () => api<{ packages: Pkg[] }>('/packages') });
+  const pkgs = useQuery({ queryKey: ['packages'], queryFn: () => api<{ packages: Pkg[] }>('/packages'), refetchInterval: 30_000 });
+  const running = (pkgs.data?.packages ?? []).filter(
+    (p) => p.isActive && (p.currentDraw?.status === 'open' || p.currentDraw?.status === 'drawing'),
+  );
   const results = useQuery({
     queryKey: ['results', 'latest', packageId],
     queryFn: () => api<{ results: ResultRow[] }>(`/results${packageId ? `?packageId=${encodeURIComponent(packageId)}` : ''}`),
@@ -47,6 +42,8 @@ export function Results() {
       <ResultDetail
         id={selectedDrawId}
         colorOf={colorOf}
+        running={running}
+        onSelect={(drawId) => setSp((prev) => { prev.set('draw', String(drawId)); return prev; }, { replace: true })}
         onBack={() => navigate(-1)}
       />
     );
@@ -77,8 +74,7 @@ export function Results() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-xs font-semibold" style={{ color }}>{result.packageName} Result</div>
-                        <div className="text-xs text-muted">{fmtDateTime(result.drawTime)} · Draw #{result.drawId}</div>
-                        <ModeBadge mode={result.mode} className="mt-1 !bg-brand-light !text-brand-dark" />
+                        <div className="text-xs text-muted">{fmtDateTime(result.drawTime)} · Draw {result.drawId}</div>
                       </div>
                       <div className="text-right">
                         {result.status === 'completed' && result.winningTicketNo !== null ? (
@@ -126,15 +122,41 @@ export function Results() {
 function ResultDetail({
   id,
   colorOf,
+  running,
+  onSelect,
   onBack,
 }: {
   id: string;
   colorOf: (pkgId: number) => string;
+  running: Pkg[];
+  onSelect: (drawId: number) => void;
   onBack: () => void;
 }) {
-  const [selectedPrize, setSelectedPrize] = useState(0);
-  const q = useQuery({ queryKey: ['draw', id], queryFn: () => api<Draw>(`/draws/${id}`) });
+  const q = useQuery({
+    queryKey: ['draw', id],
+    queryFn: () => api<Draw>(`/draws/${id}`),
+    placeholderData: keepPreviousData,
+    refetchInterval: (query) => (['completed', 'cancelled'].includes(query.state.data?.status ?? '') ? false : 5_000),
+  });
   const d = q.data;
+
+  // Top ticket = the last drawn ticket of this package. It stays until the package's next draw completes.
+  const viewedDrawn = d?.status === 'completed' && d.winningTicketNo !== null;
+  const lastDrawnRow = useQuery({
+    queryKey: ['results', 'last-drawn', d?.packageId],
+    queryFn: () => api<{ results: ResultRow[] }>(`/results?packageId=${d!.packageId}&limit=20`),
+    enabled: !!d && !viewedDrawn,
+    refetchInterval: 10_000,
+    select: (r) => r.results.find((x) => x.status === 'completed' && x.winningTicketNo !== null),
+  });
+  const lastDrawnId = viewedDrawn ? undefined : lastDrawnRow.data?.drawId;
+  const lastDrawn = useQuery({
+    queryKey: ['draw', String(lastDrawnId)],
+    queryFn: () => api<Draw>(`/draws/${lastDrawnId}`),
+    enabled: lastDrawnId !== undefined,
+    placeholderData: keepPreviousData,
+  });
+  const ticketDraw = viewedDrawn ? d : lastDrawnId !== undefined ? lastDrawn.data : undefined;
 
   const header = (
     <div className="relative flex items-center justify-center px-4 py-3 text-white" style={headerGradient}>
@@ -152,21 +174,24 @@ function ResultDetail({
   if (q.error || !d) return <div>{header}<ErrorBox error={q.error} retry={() => q.refetch()} /></div>;
 
   const c = colorOf(d.packageId);
-  const selectedPrizeAmount = PRIZE_VALUES[selectedPrize];
 
   return (
     <div className="pb-6">
       {header}
       <div className="mx-auto max-w-md space-y-2 p-2 md:max-w-xl md:space-y-3 md:p-3">
-        <div className="relative overflow-hidden rounded-card border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-yellow-100 px-4 py-5 text-center shadow-[0_4px_18px_rgba(202,138,4,0.18)]">
-          <div aria-hidden className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-yellow-300/40 blur-2xl" />
-          <div aria-hidden className="relative mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-orange-400 text-xl shadow-md">
-            ✨
+        {ticketDraw ? (
+          <DrawTicket key={ticketDraw.id} d={ticketDraw} />
+        ) : (
+          <div className="relative overflow-hidden rounded-card border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-yellow-100 px-4 py-5 text-center shadow-[0_4px_18px_rgba(202,138,4,0.18)]">
+            <div aria-hidden className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-yellow-300/40 blur-2xl" />
+            <div aria-hidden className="relative mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-orange-400 text-xl shadow-md">
+              ✨
+            </div>
+            <p className="relative text-base font-extrabold leading-snug text-amber-900">
+              {lastDrawnRow.isLoading || lastDrawn.isLoading ? 'Loading last drawn ticket…' : 'Results will be available soon.'}
+            </p>
           </div>
-          <p className="relative text-base font-extrabold leading-snug text-amber-900">
-            Results will be available soon.
-          </p>
-        </div>
+        )}
 
         {/* Winning number */}
         <div className="flex items-center gap-2 rounded-card bg-white p-3 shadow-card">
@@ -174,7 +199,7 @@ function ResultDetail({
           <div className="min-w-0 flex-1">
             <div className="text-xs font-semibold text-muted">Winning Number</div>
             <div className="text-2xl font-extrabold tabular-nums" style={{ color: c }}>
-              {d.winningTicketNo === null ? 'Cancelled' : ticketLabel(d.winningTicketNo)}
+              {d.winningTicketNo !== null ? ticketLabel(d.winningTicketNo) : d.status === 'cancelled' ? 'Cancelled' : 'Awaiting draw'}
             </div>
           </div>
           {d.winningTicketNo !== null && (
@@ -182,50 +207,64 @@ function ResultDetail({
           )}
         </div>
 
-        {/* Top 5 */}
+        {/* Running draws */}
         <div className="rounded-card border border-blue-100 bg-gradient-to-br from-white via-blue-50 to-indigo-50 p-3 shadow-[0_8px_24px_rgba(30,86,200,0.14)]">
-          <div className="mb-3 flex items-center gap-1 text-sm font-extrabold text-brand-dark">🏆 Top 5 Prize Details</div>
-          <div className="grid grid-cols-5 gap-1 text-center sm:gap-1.5">
-            {PRIZE_LABELS.map((l, i) => (
-              <button
-                key={l}
-                type="button"
-                onClick={() => setSelectedPrize(i)}
-                aria-pressed={selectedPrize === i}
-                className={`flex h-20 min-w-0 w-full flex-col overflow-hidden rounded-lg border text-center shadow-sm transition duration-200 active:scale-95 ${
-                  selectedPrize === i ? 'border-brand ring-2 ring-brand/30 shadow-md' : 'border-white/80 hover:-translate-y-0.5 hover:shadow-md'
-                }`}
-              >
-                <div className="flex min-h-9 flex-1 items-center justify-center px-0.5 text-[10px] font-extrabold leading-tight text-white sm:text-xs" style={{ background: `linear-gradient(145deg, ${COLORS[i]}, ${COLORS[i]}bb)` }}>
-                  {PRIZE_AMOUNTS[i]}
-                </div>
-                <div className="flex flex-1 flex-col items-center justify-center gap-0.5 bg-white/80 px-0.5 text-[9px] font-extrabold leading-tight sm:text-[10px]">
-                  <span>{l}</span>
-                  <span className="font-medium text-muted">({PRIZE_TIERS[i]})</span>
-                </div>
-              </button>
-            ))}
-          </div>
+          <div className="mb-3 flex items-center gap-1 text-sm font-extrabold text-brand-dark">🏆 Running Lucky Draws</div>
+          {running.length ? (
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(5.5rem,1fr))] gap-1.5 text-center">
+              {running.map((p) => {
+                const rd = p.currentDraw!;
+                const active = rd.id === d.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => onSelect(rd.id)}
+                    aria-pressed={active}
+                    className={`flex h-20 min-w-0 w-full flex-col overflow-hidden rounded-lg border text-center shadow-sm transition duration-200 active:scale-95 ${
+                      active ? 'border-brand ring-2 ring-brand/30 shadow-md' : 'border-white/80 hover:-translate-y-0.5 hover:shadow-md'
+                    }`}
+                  >
+                    <div className="flex min-h-9 flex-1 items-center justify-center px-0.5 text-[11px] font-extrabold leading-tight text-white sm:text-xs" style={themeGradient(p.theme)}>
+                      <Coins n={rd.prizeAmount} size={11} className="font-extrabold" />
+                    </div>
+                    <div className="flex flex-1 flex-col items-center justify-center gap-0.5 bg-white/80 px-0.5 text-[9px] font-extrabold leading-tight sm:text-[10px]">
+                      <span className="max-w-full truncate">{p.name}</span>
+                      <Countdown target={rd.drawTime} serverTime={rd.serverTime} className="font-medium text-muted" />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : <p className="text-center text-xs text-muted">No draws running right now.</p>}
         </div>
 
-        {/* Digit match */}
+        {/* Digit match: digits are matched from the left of the winning number */}
         <div className="overflow-hidden rounded-card border border-blue-100 bg-white shadow-[0_8px_24px_rgba(30,86,200,0.14)]">
           <div className="bg-gradient-to-r from-blue-700 to-indigo-600 px-3 py-2 text-sm font-extrabold text-white">Digit Match Prize</div>
-          <div className="mt-2 grid grid-cols-[1fr_auto_auto] gap-2 bg-blue-50 px-3 py-1.5 text-[10px] font-bold text-muted">
+          <div className="bg-blue-50 px-3 py-1.5 text-[10px] text-muted">
+            Match the winning number digit by digit from the left. Each ticket gets the prize for its longest match.
+          </div>
+          <div className="grid grid-cols-[1fr_auto_auto] gap-2 bg-blue-50 px-3 pb-1.5 text-[10px] font-bold text-muted">
             <span>Match Type</span><span className="text-right">Winning Amount</span><span className="text-right">Number</span>
           </div>
-          {DIGIT_ROWS.map((r) => (
-            <div key={r.label} className={`grid grid-cols-[1fr_auto_auto] items-center gap-2 px-3 py-2 text-xs ${r.bg}`}>
-              <div>
-                <div className="font-bold">{r.label}</div>
-                <div className="text-[10px] text-muted">({r.sub})</div>
+          {[{ matchDigits: 6, prize: d.prizeAmount, winners: d.status === 'completed' && d.winningTicketNo !== null ? 1 : null }, ...d.tiers]
+            .filter((t) => t.matchDigits === 6 || t.prize > 0)
+            .map((t) => (
+              <div key={t.matchDigits} className={`grid grid-cols-[1fr_auto_auto] items-center gap-2 px-3 py-2 text-xs ${TIER_BG[t.matchDigits]}`}>
+                <div>
+                  <div className="font-bold">{t.matchDigits === 6 ? 'Full Match (6 digits)' : `${t.matchDigits} Digit Match`}</div>
+                  <div className="text-[10px] text-muted">
+                    ({t.matchDigits === 6 ? 'Main prize' : `First ${t.matchDigits} digit${t.matchDigits > 1 ? 's' : ''}`}
+                    {t.winners !== null ? ` · ${t.winners} winner${t.winners === 1 ? '' : 's'}` : ''})
+                  </div>
+                </div>
+                <div className="text-right font-extrabold"><Coins n={t.prize} size={11} /></div>
+                <div className="min-w-10 text-right font-extrabold tabular-nums">
+                  {d.winningTicketNo !== null ? ticketLabel(d.winningTicketNo).slice(0, t.matchDigits) : '•'.repeat(t.matchDigits)}
+                </div>
               </div>
-              <div className="text-right font-extrabold"><Coins n={Math.max(1, Math.round(selectedPrizeAmount * r.pct))} size={11} /></div>
-              <div className="min-w-10 text-right font-extrabold tabular-nums">
-                {ticketLabel(d.winningTicketNo ?? EXAMPLE_WINNING_NUMBER).slice(-r.digits)}
-              </div>
-            </div>
-          ))}
+            ))}
         </div>
 
         <Link to="/results?view=full"
@@ -234,5 +273,19 @@ function ResultDetail({
         </Link>
       </div>
     </div>
+  );
+}
+function DrawTicket({ d }: { d: Draw }) {
+  const { user: me } = useAuth();
+  const ticketNo = d.winningTicketNo;
+  if (ticketNo === null) return null;
+  return (
+    <TicketCard
+      ticketNo={ticketNo}
+      drawTime={d.drawTime}
+      userName={d.iWon ? me?.name ?? d.winnerName ?? undefined : d.winnerName ?? undefined}
+      ticketPrice={d.ticketPrice}
+      qrValue={`${location.origin}/verify/${d.id}?t=${ticketLabel(ticketNo)}`}
+    />
   );
 }

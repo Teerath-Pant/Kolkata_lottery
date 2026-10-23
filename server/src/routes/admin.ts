@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { db } from '../db';
-import { packages } from '../db/schema';
+import { config } from '../config';
 import { requireAdmin } from '../middleware';
 import {
-  adjustCoins, createPackage, listAudit, listDraws, listUsers, listWinners, selectWinner, setMode, updatePackage,
+  adjustCoins, createPackage, listAudit, listDraws, listPackagesWithTiers, listUsers, listWinners, selectWinner, setMode,
+  setTierPrizes, updatePackage,
 } from '../services/admin';
 
 export const adminRouter = Router();
@@ -13,9 +13,9 @@ adminRouter.use('/admin', requireAdmin);
 const id = z.coerce.number().int().positive();
 const pkgBase = z.object({
   name: z.string().trim().min(1).max(40),
-  price: z.number().int().positive(),
+  price: z.number().int().positive().max(1_000_000),
   prizeType: z.enum(['fixed', 'pool_percent']),
-  prizeValue: z.number().int().positive(),
+  prizeValue: z.number().int().positive().max(1_000_000_000),
   maxTickets: z.number().int().min(1).max(9999),
   // schedule: either an interval in minutes or a daily time in IST, never both (checked below and in updatePackage)
   drawIntervalMinutes: z.number().int().positive().nullish(),
@@ -28,7 +28,15 @@ const pkgCreate = pkgBase.partial({ isActive: true })
   .refine((p) => p.prizeType !== 'pool_percent' || p.prizeValue <= 100, { message: 'percent prize must be <= 100' });
 
 adminRouter.get('/admin/packages', async (_req, res) => {
-  res.json({ packages: await db.select().from(packages).orderBy(packages.price) });
+  res.json({ packages: await listPackagesWithTiers() });
+});
+
+adminRouter.put('/admin/packages/:id/tier-prizes', async (req, res) => {
+  const { prizes } = z.object({
+    prizes: z.array(z.object({ matchDigits: z.number().int().min(1).max(5), prize: z.number().int().min(0).max(1_000_000_000) })).min(1).max(5)
+      .refine((a) => new Set(a.map((p) => p.matchDigits)).size === a.length, 'duplicate matchDigits'),
+  }).parse(req.body);
+  res.json(await setTierPrizes(req.user!.id, id.parse(req.params.id), prizes, req.ip));
 });
 
 adminRouter.post('/admin/packages', async (req, res) => {
@@ -61,7 +69,7 @@ adminRouter.post('/admin/draws/:id/select-winner', async (req, res) => {
 });
 
 adminRouter.post('/admin/users/:id/adjust-coins', async (req, res) => {
-  const b = z.object({ amount: z.number().int().refine((n) => n !== 0, 'amount must be non-zero'), reason: z.string().trim().min(3).max(200) }).parse(req.body);
+  const b = z.object({ amount: z.number().int().min(-config.ADMIN_MAX_ADJUST).max(config.ADMIN_MAX_ADJUST).refine((n) => n !== 0, 'amount must be non-zero'), reason: z.string().trim().min(3).max(200) }).parse(req.body);
   res.json(await adjustCoins(req.user!.id, id.parse(req.params.id), b.amount, b.reason, req.ip));
 });
 

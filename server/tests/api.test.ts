@@ -6,7 +6,7 @@ import { seed } from '../src/db/seed';
 import { runDueDraws } from '../src/services/drawJob';
 import { db } from '../src/db';
 import { draws, users } from '../src/db/schema';
-import { closePool, resetDb } from './helpers';
+import { GOOD_PASSWORD, closePool, resetDb, signup } from './helpers';
 
 let server: Server;
 let base = '';
@@ -24,28 +24,27 @@ async function call(path: string, o: { method?: string; body?: unknown; token?: 
 }
 /** "name=value" pairs of the Set-Cookie headers, ready to send back as a Cookie header. */
 const cookieJar = (h: Headers) => h.getSetCookie().map((c) => c.split(';')[0]).join('; ');
-const register = async (mobile = '9876543210') =>
-  (await call('/auth/register', { body: { mobile, name: 'Asha', password: 'secret1' } })).body;
+const register = async (username = '9876543210') => (await signup(base, username)).body;
 
 describe('http api', () => {
   it('auth: register, duplicate, login, refresh, /me', async () => {
     const r = await register();
     expect(r.accessToken).toBeTruthy();
-    expect((await call('/auth/register', { body: { mobile: '9876543210', name: 'Xy', password: 'secret1' } })).status).toBe(409);
-    expect((await call('/auth/login', { body: { mobile: '9876543210', password: 'bad-pass' } })).status).toBe(401);
-    expect((await call('/auth/login', { body: { mobile: 'abc', password: 'x' } })).status).toBe(400); // zod
-    const login = await call('/auth/login', { body: { mobile: '9876543210', password: 'secret1' } });
+    expect((await signup(base, '9876543210', { name: 'Xy', phone: '9123456780' })).status).toBe(409); // User ID taken
+    expect((await call('/auth/login', { body: { username: '9876543210', password: 'bad-pass' } })).status).toBe(401);
+    expect((await call('/auth/login', { body: { username: 'abc', password: 'x' } })).status).toBe(400); // zod
+    const login = await call('/auth/login', { body: { username: '9876543210', password: GOOD_PASSWORD } });
     expect(login.status).toBe(200);
     const ref = await call('/auth/refresh', { body: { refreshToken: login.body.refreshToken } });
     expect(ref.status).toBe(200);
     expect((await call('/auth/refresh', { body: { refreshToken: login.body.accessToken } })).status).toBe(401); // wrong token type
-    expect((await call('/me', { token: ref.body.accessToken })).body.user.mobile).toBe('9876543210');
+    expect((await call('/me', { token: ref.body.accessToken })).body.user.username).toBe('9876543210');
     expect((await call('/me')).status).toBe(401);
   });
 
   it('browser apps: tokens only in httpOnly cookies, refresh + logout via cookie, CSRF header required', async () => {
     const client = { 'X-Client': 'user' };
-    const reg = await call('/auth/register', { body: { mobile: '9876500001', name: 'Asha', password: 'secret1' }, headers: client });
+    const reg = await signup(base, '9876500001', { headers: client });
     expect(reg.status).toBe(201);
     expect(reg.body.accessToken).toBeUndefined();
     expect(reg.body.refreshToken).toBeUndefined();
@@ -55,7 +54,7 @@ describe('http api', () => {
     expect(set.find((c) => c.startsWith('rt='))).toMatch(/Path=\/api\/v1\/auth/);
 
     const Cookie = cookieJar(reg.headers);
-    expect((await call('/me', { headers: { Cookie, ...client } })).body.user.mobile).toBe('9876500001');
+    expect((await call('/me', { headers: { Cookie, ...client } })).body.user.username).toBe('9876500001');
     expect((await call('/me', { headers: { Cookie } })).status).toBe(200); // reads need no header
     const drawId = (await call('/packages')).body.packages[0].currentDraw.id;
     const buy = { method: 'POST', body: { random: true } };
@@ -73,7 +72,7 @@ describe('http api', () => {
   });
 
   it('admin app cookies are separate from the player app cookies', async () => {
-    const admin = await call('/auth/login', { body: { mobile: '9999999999', password: 'Admin@12345' }, headers: { 'X-Client': 'admin' } });
+    const admin = await call('/auth/login', { body: { username: '9999999999', password: 'Admin@12345' }, headers: { 'X-Client': 'admin' } });
     const Cookie = cookieJar(admin.headers);
     expect(Cookie).toMatch(/^admin_at=.*; admin_rt=/);
     expect((await call('/me', { headers: { Cookie, 'X-Client': 'admin' } })).body.user.role).toBe('admin');
@@ -86,7 +85,7 @@ describe('http api', () => {
     const rows = (await db.select().from(users)).filter((u) => u.role === 'user');
     expect(rows).toHaveLength(2);
     for (const r of rows) {
-      expect(r.passwordHash).not.toContain('secret1');
+      expect(r.passwordHash).not.toContain(GOOD_PASSWORD);
       expect(r.passwordHash).toMatch(/^\$2[aby]\$12\$/); // bcrypt, cost 12, salt embedded
     }
     expect(rows[0].passwordHash).not.toBe(rows[1].passwordHash);
@@ -137,7 +136,7 @@ describe('http api', () => {
   it('admin: role guard, mode/select/adjust, audit log; public sees the mode', async () => {
     const user = await register('9000000003');
     expect((await call('/admin/users', { token: user.accessToken })).status).toBe(403);
-    const admin = (await call('/auth/login', { body: { mobile: '9999999999', password: 'Admin@12345' } })).body;
+    const admin = (await call('/auth/login', { body: { username: '9999999999', password: 'Admin@12345' } })).body;
     expect(admin.user.role).toBe('admin');
     const draw = (await call('/packages')).body.packages[0].currentDraw;
     expect((await call(`/admin/draws/${draw.id}/mode`, { token: admin.accessToken, body: { mode: 'admin_selected' } })).status).toBe(200);
@@ -178,10 +177,10 @@ describe('http api', () => {
     expect((await call(`/results?date=${today}`)).body.results.length).toBe(1);
     expect((await call('/results?date=2001-01-01')).body.results.length).toBe(0);
 
-    const admin = (await call('/auth/login', { body: { mobile: '9999999999', password: 'Admin@12345' } })).body;
+    const admin = (await call('/auth/login', { body: { username: '9999999999', password: 'Admin@12345' } })).body;
     expect((await call('/admin/winners', { token: u.accessToken })).status).toBe(403);
     const winners = (await call('/admin/winners', { token: admin.accessToken })).body.winners;
     expect(winners).toHaveLength(1);
-    expect(winners[0]).toMatchObject({ drawId: draw.id, userId: u.user.id, name: 'Asha', mobile: '9000000004', prizeAmount: 2000, winMethod: 'random' });
+    expect(winners[0]).toMatchObject({ drawId: draw.id, userId: u.user.id, name: 'Asha', username: '9000000004', prizeAmount: 2000, winMethod: 'random' });
   });
 });

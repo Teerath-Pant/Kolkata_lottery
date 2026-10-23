@@ -1,8 +1,9 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { Exec, Tx, db } from '../db';
-import { adminAuditLog, draws, packages, tickets, users, wallets } from '../db/schema';
+import { adminAuditLog, draws, packageTierPrizes, packages, tickets, users, wallets } from '../db/schema';
 import { AppError, notFound } from '../lib/errors';
-import { TICKET_MAX, TICKET_MIN, nextDrawFor, openDraw } from './draws';
+import { TIER_DIGITS, defaultTierPrizes } from '../lib/tiers';
+import { TICKET_MAX, TICKET_MIN, invalidatePublicCache, nextDrawFor, openDraw, saveTierPrizes } from './draws';
 import { applyWallet } from './wallet';
 
 export const audit = (exec: Exec, adminId: number, action: string, drawId: number | null, payload: unknown, ip?: string) =>
@@ -11,8 +12,13 @@ export const audit = (exec: Exec, adminId: number, action: string, drawId: numbe
 type PkgInput = Omit<typeof packages.$inferInsert, 'id'>;
 
 export async function createPackage(adminId: number, input: PkgInput, ip?: string, now = new Date()) {
+  try { return await createPackageTx(adminId, input, ip, now); } finally { invalidatePublicCache(); }
+}
+
+async function createPackageTx(adminId: number, input: PkgInput, ip: string | undefined, now: Date) {
   return db.transaction(async (tx) => {
     const [pkg] = await tx.insert(packages).values(input).returning();
+    await saveTierPrizes(tx, pkg.id, Object.entries(defaultTierPrizes(pkg.price)).map(([k, prize]) => ({ matchDigits: Number(k), prize })));
     if (pkg.isActive) await openDraw(tx, pkg, nextDrawFor(pkg, now, now));
     await audit(tx, adminId, 'package_create', null, pkg, ip);
     return pkg;
@@ -20,6 +26,10 @@ export async function createPackage(adminId: number, input: PkgInput, ip?: strin
 }
 
 export async function updatePackage(adminId: number, id: number, patch: Partial<PkgInput>, ip?: string, now = new Date()) {
+  try { return await updatePackageTx(adminId, id, patch, ip, now); } finally { invalidatePublicCache(); }
+}
+
+async function updatePackageTx(adminId: number, id: number, patch: Partial<PkgInput>, ip: string | undefined, now: Date) {
   return db.transaction(async (tx) => {
     const [before] = await tx.select().from(packages).where(eq(packages.id, id)).for('update');
     if (!before) throw notFound('Package');
@@ -33,6 +43,27 @@ export async function updatePackage(adminId: number, id: number, patch: Partial<
     if (pkg.isActive && !open) await openDraw(tx, pkg, nextDrawFor(pkg, now, now));
     await audit(tx, adminId, 'package_update', null, { before, patch }, ip);
     return pkg;
+  });
+}
+
+export async function listPackagesWithTiers() {
+  const pkgs = await db.select().from(packages).orderBy(packages.price);
+  const tiers = await db.select().from(packageTierPrizes);
+  return pkgs.map((p) => ({
+    ...p,
+    tierPrizes: Object.fromEntries(TIER_DIGITS.map((k) => [k, tiers.find((t) => t.packageId === p.id && t.matchDigits === k)?.prize ?? 0])),
+  }));
+}
+
+/** Sets the leading-digit prizes. They apply to draws opened from now on; a running draw keeps its snapshot. */
+export async function setTierPrizes(adminId: number, packageId: number, prizes: { matchDigits: number; prize: number }[], ip?: string) {
+  return db.transaction(async (tx) => {
+    const [pkg] = await tx.select({ id: packages.id }).from(packages).where(eq(packages.id, packageId)).for('update');
+    if (!pkg) throw notFound('Package');
+    const before = await tx.select().from(packageTierPrizes).where(eq(packageTierPrizes.packageId, packageId));
+    await saveTierPrizes(tx, packageId, prizes);
+    await audit(tx, adminId, 'tier_prizes_update', null, { packageId, before, after: prizes }, ip);
+    return { packageId, prizes };
   });
 }
 
@@ -76,7 +107,7 @@ export async function adjustCoins(adminId: number, userId: number, amount: numbe
 }
 
 export const listUsers = (limit = 100) =>
-  db.select({ id: users.id, mobile: users.mobile, name: users.name, role: users.role, createdAt: users.createdAt, balance: wallets.balance })
+  db.select({ id: users.id, username: users.username, name: users.name, role: users.role, createdAt: users.createdAt, balance: wallets.balance })
     .from(users).leftJoin(wallets, eq(wallets.userId, users.id)).orderBy(desc(users.id)).limit(limit);
 
 export const listDraws = (opts: { status?: string; packageId?: number; limit: number }) =>
@@ -96,7 +127,7 @@ export const listWinners = (limit = 500) =>
   db.select({
     drawId: draws.id, packageName: packages.name, drawTime: draws.drawTime, ticketNo: draws.winningTicketNo,
     prizeAmount: draws.prizeAmount, winMethod: draws.winMethod,
-    userId: users.id, name: users.name, mobile: users.mobile,
+    userId: users.id, name: users.name, username: users.username,
   }).from(draws)
     .innerJoin(users, eq(users.id, draws.winnerUserId))
     .innerJoin(packages, eq(packages.id, draws.packageId))

@@ -6,6 +6,7 @@ import { Countdown, ErrorBox, Spinner } from "../components/ui";
 import { api } from "../lib/api";
 import type { Pkg } from "../lib/types";
 import { Logo } from "../components/Logo";
+import { MenuButton } from "../components/sidebarContext";
 import { headerGradient } from "../theme";
 
 const MLink = motion.create(Link);
@@ -56,9 +57,7 @@ export function Home() {
         style={headerGradient}
       >
         <div className="flex justify-start">
-          <Link to="/more" aria-label="Menu" className="p-2 text-2xl leading-none">
-            ☰
-          </Link>
+          <MenuButton className="p-2" />
         </div>
         <div className="flex justify-center">
           <Logo size={64} className="shrink-0" />

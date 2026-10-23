@@ -17,8 +17,9 @@ const big = (name: string) => bigint(name, { mode: 'number' });
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
-  mobile: text('mobile').notNull().unique(),
+  username: text('mobile').notNull().unique(),
   name: text('name').notNull(),
+  phone: text('phone').unique(), // verified mobile number (OTP at signup); null for accounts created before OTP existed
   passwordHash: text('password_hash').notNull(),
   role: roleEnum('role').notNull().default('user'),
   createdAt: ts('created_at').notNull().defaultNow(),
@@ -64,6 +65,18 @@ export const packages = pgTable('packages', {
   check('pkg_one_schedule', sql`(${t.drawIntervalMinutes} IS NULL) <> (${t.dailyTime} IS NULL)`),
 ]);
 
+// Consolation prizes by leading-digit match with the winning ticket (1..5 digits; 6 = the main prize).
+// Admin-editable defaults per package; copied onto each draw at open time (draw_tier_prizes).
+export const packageTierPrizes = pgTable('package_tier_prizes', {
+  packageId: integer('package_id').notNull().references(() => packages.id),
+  matchDigits: integer('match_digits').notNull(),
+  prize: big('prize').notNull().default(0),
+}, (t) => [
+  primaryKey({ columns: [t.packageId, t.matchDigits] }),
+  check('pkg_tier_digits_range', sql`${t.matchDigits} BETWEEN 1 AND 5`),
+  check('pkg_tier_prize_nonneg', sql`${t.prize} >= 0`),
+]);
+
 // Package values are snapshotted onto each draw at open time, so editing a package never
 // changes the rules of a draw people already bought into.
 export const draws = pgTable('draws', {
@@ -91,6 +104,16 @@ export const draws = pgTable('draws', {
   uniqueIndex('one_open_draw_per_package').on(t.packageId).where(sql`status = 'open'`),
 ]);
 
+export const drawTierPrizes = pgTable('draw_tier_prizes', {
+  drawId: integer('draw_id').notNull().references(() => draws.id),
+  matchDigits: integer('match_digits').notNull(),
+  prize: big('prize').notNull().default(0),
+}, (t) => [
+  primaryKey({ columns: [t.drawId, t.matchDigits] }),
+  check('draw_tier_digits_range', sql`${t.matchDigits} BETWEEN 1 AND 5`),
+  check('draw_tier_prize_nonneg', sql`${t.prize} >= 0`),
+]);
+
 export const tickets = pgTable('tickets', {
   id: serial('id').primaryKey(),
   drawId: integer('draw_id').notNull().references(() => draws.id),
@@ -103,6 +126,21 @@ export const tickets = pgTable('tickets', {
   index('tickets_user_idx').on(t.userId),
 ]);
 
+// One row per ticket that won a leading-digit consolation prize (the main winner is on draws).
+export const drawTierWinners = pgTable('draw_tier_winners', {
+  id: serial('id').primaryKey(),
+  drawId: integer('draw_id').notNull().references(() => draws.id),
+  userId: integer('user_id').notNull().references(() => users.id),
+  ticketNo: integer('ticket_no').notNull(),
+  matchDigits: integer('match_digits').notNull(),
+  prize: big('prize').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('tier_winner_once_idx').on(t.drawId, t.userId),
+  index('tier_winner_draw_idx').on(t.drawId),
+  check('tier_winner_digits_range', sql`${t.matchDigits} BETWEEN 1 AND 5`),
+]);
+
 export const adminAuditLog = pgTable('admin_audit_log', {
   id: serial('id').primaryKey(),
   adminId: integer('admin_id').references(() => users.id), // null = system action
@@ -113,8 +151,40 @@ export const adminAuditLog = pgTable('admin_audit_log', {
   createdAt: ts('created_at').notNull().defaultNow(),
 }, (t) => [index('audit_created_idx').on(t.createdAt)]);
 
+// Refresh tokens are single-use: each refresh revokes the presented token and issues the next one in the same
+// family. Presenting an already-used token (theft signal) revokes the whole family. Logout revokes the family.
+export const refreshTokens = pgTable('refresh_tokens', {
+  jti: text('jti').primaryKey(),
+  familyId: text('family_id').notNull(),
+  userId: integer('user_id').notNull().references(() => users.id),
+  expiresAt: ts('expires_at').notNull(),
+  revokedAt: ts('revoked_at'), // set on rotation, logout and family revocation
+  rotatedAt: ts('rotated_at'), // set only when exchanged for a new token (allows the short race grace)
+  createdAt: ts('created_at').notNull().defaultNow(),
+}, (t) => [index('refresh_family_idx').on(t.familyId), index('refresh_expires_idx').on(t.expiresAt)]);
+
+// Failed-login counter per user ID (also for IDs that do not exist, so lockouts do not reveal which accounts exist).
+export const loginThrottle = pgTable('login_throttle', {
+  username: text('username').primaryKey(),
+  failures: integer('failures').notNull().default(0),
+  windowStart: ts('window_start').notNull().defaultNow(),
+  lockedUntil: ts('locked_until'),
+});
+
+// One live OTP per mobile number: only a hash is stored, and it dies after OTP_TTL_MINUTES or OTP_MAX_ATTEMPTS wrong tries.
+export const otpCodes = pgTable('otp_codes', {
+  mobile: text('mobile').primaryKey(),
+  codeHash: text('code_hash').notNull(),
+  expiresAt: ts('expires_at').notNull(),
+  attempts: integer('attempts').notNull().default(0),
+  lastSentAt: ts('last_sent_at').notNull(),
+  sendWindowStart: ts('send_window_start').notNull(),
+  sends: integer('sends').notNull().default(1),
+});
+
 export const idempotencyKeys = pgTable('idempotency_keys', {
   key: text('key').notNull(),
+  requestHash: text('request_hash'), // binds the key to one request (draw + choice); null on rows from before this existed
   userId: integer('user_id').notNull().references(() => users.id),
   response: jsonb('response').notNull(),
   createdAt: ts('created_at').notNull().defaultNow(),

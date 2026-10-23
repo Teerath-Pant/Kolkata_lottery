@@ -48,7 +48,7 @@ export function Layout() {
             <div className="truncate text-sm font-bold text-gold">{APP_NAME}</div>
             <div className="text-[11px] text-white/70">Admin Panel</div>
           </div>
-          <span className="hidden text-xs text-white/80 lg:block">{admin.name} · +{admin.mobile}</span>
+          <span className="hidden text-xs text-white/80 lg:block">{admin.name} · {admin.username}</span>
           <motion.button whileTap={{ scale: 0.92 }} onClick={logout} className="hidden rounded-pill bg-white/15 px-3 py-1.5 text-xs font-semibold md:block">Logout</motion.button>
         </div>
         {/* tabs on tablet/desktop; on phones the hamburger drawer below replaces them */}
@@ -91,7 +91,7 @@ export function Layout() {
                 ))}
               </nav>
               <div className="border-t border-white/15 p-3">
-                <div className="mb-2 truncate text-xs text-white/80">{admin.name} · +{admin.mobile}</div>
+                <div className="mb-2 truncate text-xs text-white/80">{admin.name} · {admin.username}</div>
                 <button type="button" onClick={logout} className="w-full rounded-pill bg-white/15 py-2 text-sm font-semibold">Logout</button>
               </div>
             </motion.aside>

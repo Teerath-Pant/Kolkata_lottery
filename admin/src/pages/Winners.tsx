@@ -14,7 +14,7 @@ export function Winners() {
     <div className="space-y-3">
       <Load q={q}>{(d) => {
         const s = search.trim().toLowerCase();
-        const rows = d.winners.filter((w) => !s || w.name.toLowerCase().includes(s) || w.mobile.includes(s));
+        const rows = d.winners.filter((w) => !s || w.name.toLowerCase().includes(s) || w.username.includes(s));
         return (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -22,7 +22,7 @@ export function Winners() {
               <Card><div className="text-xs text-muted">Different winners</div><div className="text-xl font-extrabold text-brand-dark sm:text-2xl">{new Set(d.winners.map((w) => w.userId)).size}</div></Card>
               <Card className="col-span-2 sm:col-span-1"><div className="text-xs text-muted">Coins paid out</div><div className="text-xl font-extrabold text-brand-dark sm:text-2xl"><Coins n={d.winners.reduce((a, w) => a + (w.prizeAmount ?? 0), 0)} size={20} /></div></Card>
             </div>
-            <input className={`${field} md:!w-72`} placeholder="Search name or mobile" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input className={`${field} md:!w-72`} placeholder="Search name or user ID" value={search} onChange={(e) => setSearch(e.target.value)} />
             {rows.length === 0 ? <Empty>{d.winners.length ? 'No winner matches your search.' : 'No draw has been won yet.'}</Empty> : (
               <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                 {rows.map((w) => (
@@ -31,7 +31,7 @@ export function Winners() {
                       <b className="truncate">{w.name}</b>
                       <Coins n={w.prizeAmount ?? 0} />
                     </div>
-                    <div className="text-xs text-muted">+{w.mobile} · user id {w.userId}</div>
+                    <div className="text-xs text-muted">{w.username} · user id {w.userId}</div>
                     <div className="mt-2 text-xs">
                       <b>{w.packageName}</b> · draw #{w.drawId} · ticket <b className="tabular-nums">#{ticketLabel(w.ticketNo ?? 0)}</b>
                     </div>

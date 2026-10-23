@@ -65,7 +65,7 @@ function PackageForm({ pkg, onDone }: { pkg?: AdminPkg; onDone?: () => void }) {
   const toast = useToast();
   const save = useMutation({
     mutationFn: () => {
-      const { id, ...body } = f;
+      const { id, tierPrizes, ...body } = f;
       return pkg
         ? api(`/admin/packages/${pkg.id}`, { method: "PATCH", body })
         : api("/admin/packages", { body });
@@ -233,6 +233,57 @@ function PackageForm({ pkg, onDone }: { pkg?: AdminPkg; onDone?: () => void }) {
           <Button disabled={save.isPending}>{pkg ? "Save" : "Create"}</Button>
         </div>
       </form>
+      {pkg && <TierPrizes pkg={pkg} />}
     </Card>
+  );
+}
+
+const TIERS = [5, 4, 3, 2, 1];
+
+/** Consolation prizes by matching leading digits of the winning number (6 digits = main prize above). */
+function TierPrizes({ pkg }: { pkg: AdminPkg }) {
+  const initial = () => Object.fromEntries(TIERS.map((k) => [k, String(pkg.tierPrizes?.[k] ?? 0)]));
+  const [v, setV] = useState<Record<number, string>>(initial);
+  const qc = useQueryClient();
+  const toast = useToast();
+  const save = useMutation({
+    mutationFn: () =>
+      api(`/admin/packages/${pkg.id}/tier-prizes`, {
+        method: "PUT",
+        body: { prizes: TIERS.map((k) => ({ matchDigits: k, prize: Math.max(0, Math.floor(Number(v[k]) || 0)) })) },
+      }),
+    onSuccess: () => {
+      toast("Digit prizes saved", "success");
+      ["admin-packages", "admin-audit"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+    },
+    onError: (e) => toast(e instanceof Error ? e.message : "Failed", "error"),
+  });
+  return (
+    <form
+      className="mt-3 space-y-2 border-t border-line pt-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        save.mutate();
+      }}
+    >
+      <div className="text-[11px] font-medium text-muted">
+        Digit-match prizes (coins). A ticket gets the prize for its longest run of matching digits from the left of the
+        winning number; 6 digits is the main prize. 0 turns a tier off. Applies from the next draw.
+      </div>
+      <div className="grid grid-cols-5 gap-1.5">
+        {TIERS.map((k) => (
+          <L key={k} t={`${k} digit${k > 1 ? "s" : ""}`}>
+            <input
+              className={field}
+              type="number"
+              min={0}
+              value={v[k]}
+              onChange={(e) => setV({ ...v, [k]: e.target.value })}
+            />
+          </L>
+        ))}
+      </div>
+      <Button variant="ghost" disabled={save.isPending}>Save digit prizes</Button>
+    </form>
   );
 }
