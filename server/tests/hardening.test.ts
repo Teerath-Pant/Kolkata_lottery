@@ -5,14 +5,14 @@ import { eq } from 'drizzle-orm';
 import { createApp } from '../src/app';
 import { config } from '../src/config';
 import { db, pool } from '../src/db';
-import { idempotencyKeys, otpCodes, users } from '../src/db/schema';
+import { idempotencyKeys, users } from '../src/db/schema';
 import { seed } from '../src/db/seed';
 import { passwordProblem } from '../src/lib/password';
 import { adjustCoins } from '../src/services/admin';
 import { buyTicket, purgeExpiredIdempotencyKeys } from '../src/services/buy';
 import { invalidatePublicCache, publicDraw, publicPackages } from '../src/services/draws';
 import { MAX_BALANCE } from '../src/services/wallet';
-import { GOOD_PASSWORD, closePool, lastOtp, makeUser, resetDb, signup } from './helpers';
+import { GOOD_PASSWORD, closePool, makeUser, resetDb, signup } from './helpers';
 
 let server: Server;
 let base = '';
@@ -28,79 +28,15 @@ async function call(path: string, o: { body?: unknown; token?: string } = {}) {
   });
   return { status: res.status, body: await res.json().catch(() => null) as any };
 }
-const otpRequest = (phone: string) => call('/auth/otp/request', { body: { phone } });
-
-describe('signup OTP', () => {
-  it('needs a code sent to the mobile number; the new account is marked verified and gets the bonus', async () => {
-    const reg = await signup(base, 'otp_user', { phone: '9876501234' });
-    expect(reg.status).toBe(201);
-    expect(reg.body.user.verified).toBe(true);
-    const me = await call('/me', { token: reg.body.accessToken });
-    expect(me.body.balance).toBe(config.SIGNUP_BONUS);
-    const [u] = await db.select().from(users).where(eq(users.username, 'otp_user'));
-    expect(u.phone).toBe('9876501234');
-  });
-
-  it('rejects register without / with a wrong code, and a normalised +91 number maps to the same mobile', async () => {
-    expect((await call('/auth/register', { body: { username: 'no_otp', name: 'Xy', phone: '9876500001', password: GOOD_PASSWORD } })).status).toBe(400);
-    await otpRequest('+91 98765 00002');
-    const code = lastOtp('9876500002');
-    expect(code).toMatch(/^\d{6}$/);
-    const wrong = code === '123456' ? '654321' : '123456';
-    const bad = await signup(base, 'wrong_code', { phone: '9876500002', otp: wrong });
-    expect(bad.status).toBe(400);
-    expect(bad.body.error.code).toBe('OTP_INVALID');
-  });
-
-  it('is single-use, and a failed signup (taken User ID) keeps the code usable', async () => {
-    expect((await signup(base, 'first_user', { phone: '9876500010' })).status).toBe(201);
-
-    await otpRequest('9876500011');
-    const code = lastOtp('9876500011');
-    const taken = await call('/auth/register', { body: { username: 'first_user', name: 'Xy', phone: '9876500011', otp: code, password: GOOD_PASSWORD } });
+describe('signup', () => {
+  it('registers with a mobile number, no OTP, one account per number', async () => {
+    expect((await signup(base, 'first_user', { phone: '+91 98765 00011' })).status).toBe(201);
+    const [u] = await db.select().from(users).where(eq(users.username, 'first_user'));
+    expect(u.phone).toBe('9876500011');
+    const taken = await signup(base, 'second_user', { phone: '9876500011' });
     expect(taken.status).toBe(409);
-    const ok = await call('/auth/register', { body: { username: 'second_user', name: 'Xy', phone: '9876500011', otp: code, password: GOOD_PASSWORD } });
-    expect(ok.status).toBe(201);
-    const replay = await call('/auth/register', { body: { username: 'third_user', name: 'Xy', phone: '9876500011', otp: code, password: GOOD_PASSWORD } });
-    expect(replay.status).toBe(400); // code already spent
-  });
-
-  it('one mobile number = one account', async () => {
-    expect((await signup(base, 'owner_one', { phone: '9876500020' })).status).toBe(201);
-    const again = await otpRequest('9876500020');
-    expect(again.status).toBe(409);
-    expect(again.body.error.code).toBe('PHONE_EXISTS');
-  });
-
-  it('locks the code after OTP_MAX_ATTEMPTS wrong tries, even for the right code', async () => {
-    await otpRequest('9876500030');
-    const code = lastOtp('9876500030');
-    const wrong = code === '111111' ? '222222' : '111111';
-    for (let i = 0; i < config.OTP_MAX_ATTEMPTS; i++) {
-      expect((await call('/auth/register', { body: { username: 'guesser', name: 'Xy', phone: '9876500030', otp: wrong, password: GOOD_PASSWORD } })).status).toBe(400);
-    }
-    expect((await call('/auth/register', { body: { username: 'guesser', name: 'Xy', phone: '9876500030', otp: code, password: GOOD_PASSWORD } })).status).toBe(400);
-  });
-
-  it('expired codes are rejected', async () => {
-    await otpRequest('9876500040');
-    const code = lastOtp('9876500040');
-    await db.update(otpCodes).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(otpCodes.mobile, '9876500040'));
-    expect((await call('/auth/register', { body: { username: 'late_user', name: 'Xy', phone: '9876500040', otp: code, password: GOOD_PASSWORD } })).status).toBe(400);
-  });
-
-  it('caps how many codes one number can request per hour', async () => {
-    for (let i = 0; i < config.OTP_MAX_SENDS_PER_HOUR; i++) expect((await otpRequest('9876500050')).status).toBe(200);
-    const over = await otpRequest('9876500050');
-    expect(over.status).toBe(429);
-    expect(over.body.error.code).toBe('OTP_LIMIT');
-  });
-
-  it('the dev OTP is only returned by the console provider outside production', async () => {
-    const r = await otpRequest('9876500060');
-    expect(config.SMS_PROVIDER).toBe('console');
-    expect(r.body.devOtp).toBe(lastOtp('9876500060'));
-    expect((await otpRequest('12345')).status).toBe(400); // not a valid mobile number
+    expect(taken.body.error.code).toBe('PHONE_EXISTS');
+    expect((await signup(base, 'bad_phone', { phone: '12345' })).status).toBe(400);
   });
 });
 

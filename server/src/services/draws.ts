@@ -126,7 +126,8 @@ async function withViewer(ids: number[], base: Base, viewerId?: number) {
     }
     for (const t of await db.select({ drawId: drawTierWinners.drawId, matchDigits: drawTierWinners.matchDigits, prize: drawTierWinners.prize })
       .from(drawTierWinners).where(and(inArray(drawTierWinners.drawId, ids), eq(drawTierWinners.userId, viewerId)))) {
-      tier.set(t.drawId, { matchDigits: t.matchDigits, prize: t.prize });
+      const prev = tier.get(t.drawId); // several winning tickets: best match shown, prizes summed
+      tier.set(t.drawId, { matchDigits: Math.max(prev?.matchDigits ?? 0, t.matchDigits), prize: (prev?.prize ?? 0) + t.prize });
     }
   }
   const serverTime = new Date().toISOString(); // always fresh, even when `base` came from the cache: countdowns rely on it

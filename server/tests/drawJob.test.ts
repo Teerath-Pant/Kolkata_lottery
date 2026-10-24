@@ -5,7 +5,7 @@ import { adminAuditLog, drawTierPrizes, drawTierWinners, draws, packages, ticket
 import { prefixMatch } from '../src/lib/tiers';
 import { nextDrawFor } from '../src/services/draws';
 import { executeDraw, runDueDraws } from '../src/services/drawJob';
-import { selectWinner, setMode } from '../src/services/admin';
+import { deletePackage, listPackagesWithTiers, selectWinner, setMode, setTierPrizes, updatePackage } from '../src/services/admin';
 import { balanceOf, closePool, makeDraw, makeUser, resetDb, sellTickets } from './helpers';
 
 beforeEach(resetDb);
@@ -150,6 +150,70 @@ describe('draw job', () => {
     expect(tw.map((t) => [t.ticketNo, t.matchDigits, t.prize]).sort()).toEqual([
       [123450, 5, 2000], [123499, 4, 500], [129999, 2, 25], [199999, 1, 5],
     ].sort());
+  });
+
+  it('one user holding jackpot + several tier tickets: every ticket paid, one summed prize row, draw still completes', async () => {
+    const { pkg, draw } = await makeDraw({ mode: 'admin_selected', prizeValue: 1000, drawTime: past() });
+    await db.update(draws).set({ selectedTicketNo: 123456 }).where(eq(draws.id, draw.id));
+    await db.insert(drawTierPrizes).values([{ drawId: draw.id, matchDigits: 5, prize: 200 }, { drawId: draw.id, matchDigits: 4, prize: 50 }]);
+    const u = await makeUser(1000);
+    await db.insert(tickets).values([123456, 123450, 123451, 123499].map((ticketNo) => ({ drawId: draw.id, userId: u.id, ticketNo })));
+
+    expect(await executeDraw(draw.id)).toBe('completed');
+    expect(await balanceOf(u.id)).toBe(1000 + 1000 + 200 + 200 + 50);
+    expect(await db.select().from(walletLedger).where(eq(walletLedger.type, 'prize'))).toHaveLength(1);
+    expect((await db.select().from(drawTierWinners)).map((t) => t.matchDigits).sort()).toEqual([4, 5, 5]);
+    expect(await openCount(pkg.id)).toBe(1);
+  });
+
+  it('package edits apply to the open draw while it has no tickets sold', async () => {
+    const admin = await makeUser(0);
+    const { pkg, draw } = await makeDraw({ price: 50, prizeValue: 2000, max: 100 });
+    const now = new Date('2026-10-24T09:30:00Z'); // 15:00 IST
+    await updatePackage(admin.id, pkg.id, { price: 25, prizeValue: 20000, maxTickets: 10, drawIntervalMinutes: null, dailyTime: '15:09' }, undefined, now);
+    await setTierPrizes(admin.id, pkg.id, [{ matchDigits: 5, prize: 777 }]);
+    const [d] = await db.select().from(draws).where(eq(draws.id, draw.id));
+    expect([d.status, d.ticketPrice, d.prizeValue, d.maxTickets]).toEqual(['open', 25, 20000, 10]);
+    expect(d.drawTime.toISOString()).toBe('2026-10-24T09:39:00.000Z');
+    expect((await db.select().from(drawTierPrizes).where(eq(drawTierPrizes.drawId, draw.id))).find((t) => t.matchDigits === 5)?.prize).toBe(777);
+  });
+
+  it('package is locked while its open draw has tickets sold, and unlocks once the result is out', async () => {
+    const admin = await makeUser(0);
+    const { pkg, draw } = await makeDraw({ price: 50, prizeValue: 2000, max: 100 });
+    await sellTickets(draw.id, 50, 1);
+    const tiersBefore = await db.select().from(drawTierPrizes).where(eq(drawTierPrizes.drawId, draw.id));
+    await expect(updatePackage(admin.id, pkg.id, { price: 25, name: 'X' })).rejects.toMatchObject({ code: 'PACKAGE_LOCKED' });
+    await expect(setTierPrizes(admin.id, pkg.id, [{ matchDigits: 5, prize: 777 }])).rejects.toMatchObject({ code: 'PACKAGE_LOCKED' });
+    const [p] = await db.select().from(packages).where(eq(packages.id, pkg.id));
+    expect([p.price, p.name]).toEqual([50, 'Test']);
+    const [d] = await db.select().from(draws).where(eq(draws.id, draw.id));
+    expect([d.ticketPrice, d.prizeValue, d.maxTickets, d.drawTime.getTime()]).toEqual([50, 2000, 100, draw.drawTime.getTime()]);
+    expect(await db.select().from(drawTierPrizes).where(eq(drawTierPrizes.drawId, draw.id))).toEqual(tiersBefore);
+
+    await db.update(draws).set({ drawTime: past() }).where(eq(draws.id, draw.id));
+    await executeDraw(draw.id); // result announced, next draw opens empty
+    await updatePackage(admin.id, pkg.id, { price: 25 });
+    expect((await db.select().from(draws)).find((x) => x.status === 'open')?.ticketPrice).toBe(25);
+  });
+
+  it('delete: refused while tickets are sold; otherwise soft-deletes, cancels the empty draw, keeps history', async () => {
+    const admin = await makeUser(0);
+    const { pkg, draw } = await makeDraw({ drawTime: past() });
+    await sellTickets(draw.id, 50, 1);
+    await expect(deletePackage(admin.id, pkg.id)).rejects.toMatchObject({ code: 'PACKAGE_LOCKED' });
+
+    await executeDraw(draw.id); // result out, next draw opens empty
+    await deletePackage(admin.id, pkg.id);
+    const all = await db.select().from(draws).where(eq(draws.packageId, pkg.id));
+    expect(all.map((d) => d.status).sort()).toEqual(['cancelled', 'completed']);
+    expect(await openCount(pkg.id)).toBe(0);
+    expect((await listPackagesWithTiers()).map((p) => p.id)).not.toContain(pkg.id);
+    const [p] = await db.select().from(packages).where(eq(packages.id, pkg.id));
+    expect([p.isActive, !!p.deletedAt]).toEqual([false, true]);
+    await expect(updatePackage(admin.id, pkg.id, { isActive: true })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(deletePackage(admin.id, pkg.id)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect((await db.select().from(adminAuditLog)).map((a) => a.action)).toContain('package_delete');
   });
 
   it('a tier with prize 0 (or missing) pays nothing', async () => {

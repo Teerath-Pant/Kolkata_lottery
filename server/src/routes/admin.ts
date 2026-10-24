@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { config } from '../config';
+import { themeEnum } from '../db/schema';
 import { requireAdmin } from '../middleware';
 import {
-  adjustCoins, createPackage, listAudit, listDraws, listPackagesWithTiers, listUsers, listWinners, selectWinner, setMode,
+  adjustCoins, createPackage, deletePackage, listAudit, listDraws, listPackagesWithTiers, listUsers, listWinners, selectWinner, setMode,
   setTierPrizes, updatePackage,
 } from '../services/admin';
 
@@ -20,7 +21,7 @@ const pkgBase = z.object({
   // schedule: either an interval in minutes or a daily time in IST, never both (checked below and in updatePackage)
   drawIntervalMinutes: z.number().int().positive().nullish(),
   dailyTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Daily time must be HH:MM').nullish(),
-  theme: z.enum(['green', 'red', 'blue', 'purple', 'pink']),
+  theme: z.enum(themeEnum.enumValues),
   isActive: z.boolean(),
 });
 const pkgCreate = pkgBase.partial({ isActive: true })
@@ -49,6 +50,10 @@ adminRouter.patch('/admin/packages/:id', async (req, res) => {
   res.json(await updatePackage(req.user!.id, id.parse(req.params.id), b, req.ip));
 });
 
+adminRouter.delete('/admin/packages/:id', async (req, res) => {
+  res.json(await deletePackage(req.user!.id, id.parse(req.params.id), req.ip));
+});
+
 adminRouter.get('/admin/draws', async (req, res) => {
   const q = z.object({
     status: z.enum(['open', 'drawing', 'completed', 'cancelled']).optional(),
@@ -75,4 +80,12 @@ adminRouter.post('/admin/users/:id/adjust-coins', async (req, res) => {
 
 adminRouter.get('/admin/users', async (_req, res) => res.json({ users: await listUsers() }));
 adminRouter.get('/admin/winners', async (_req, res) => res.json({ winners: await listWinners() }));
-adminRouter.get('/admin/audit-log', async (_req, res) => res.json({ log: await listAudit() }));
+adminRouter.get('/admin/audit-log', async (req, res) => {
+  const q = z.object({
+    action: z.string().max(64).optional(),
+    adminId: id.optional(),
+    page: z.coerce.number().int().min(1).max(100_000).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  }).parse(req.query);
+  res.json(await listAudit(q));
+});

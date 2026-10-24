@@ -60,7 +60,7 @@ gameRouter.get('/me/tickets', requireAuth, async (req, res) => {
     won: sql<boolean>`${draws.winnerUserId} = ${tickets.userId}`,
     matchDigits: drawTierWinners.matchDigits, tierPrize: drawTierWinners.prize,
   }).from(tickets).innerJoin(draws, eq(draws.id, tickets.drawId)).innerJoin(packages, eq(packages.id, draws.packageId))
-    .leftJoin(drawTierWinners, and(eq(drawTierWinners.drawId, tickets.drawId), eq(drawTierWinners.userId, tickets.userId)))
+    .leftJoin(drawTierWinners, and(eq(drawTierWinners.drawId, tickets.drawId), eq(drawTierWinners.ticketNo, tickets.ticketNo)))
     .where(eq(tickets.userId, req.user!.id)).orderBy(desc(tickets.createdAt)).limit(200);
   res.json({ tickets: rows });
 });
@@ -80,7 +80,7 @@ gameRouter.get('/results', async (req, res) => {
     winningTicketNo: draws.winningTicketNo, prizeAmount: draws.prizeAmount, winnerName: users.name,
   }).from(draws).innerJoin(packages, eq(packages.id, draws.packageId)).leftJoin(users, eq(users.id, draws.winnerUserId))
     .where(and(
-      sql`${draws.status} IN ('completed','cancelled')`,
+      eq(draws.status, 'completed'), // cancelled draws have no result to show
       q.packageId ? eq(draws.packageId, q.packageId) : undefined,
       start ? gte(draws.drawTime, start) : undefined,
       start ? lt(draws.drawTime, new Date(start.getTime() + 86_400_000)) : undefined,

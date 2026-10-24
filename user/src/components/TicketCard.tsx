@@ -49,10 +49,13 @@ const STAR = Array.from({ length: 48 }, (_, i) => {
   return `${(Math.cos(angle) * radius).toFixed(1)},${(Math.sin(angle) * radius).toFixed(1)}`;
 }).join(' ');
 
-function CoinPrice({ price, size }: { price: number; size: string }) {
+// Shrinks the font so "coin + amount" never exceeds maxW (cqw), however many digits the price has.
+function CoinPrice({ price, size, maxW }: { price: number; size: number; maxW: number }) {
+  const textEm = [...fmtNum(price)].reduce((w, c) => w + (/\d/.test(c) ? 0.556 : 0.278), 0);
+  const fontSize = Math.min(size, maxW / (0.81 + textEm)); // 0.66em coin + 0.15em gap, Arial bold widths
   return (
-    <span style={{ fontSize: size, lineHeight: 1, whiteSpace: 'nowrap' }}>
-      <Coins n={price} size={1} className="[&>svg]:!h-[2.2cqw] [&>svg]:!w-[2.2cqw]" />
+    <span style={{ fontSize: `${fontSize}cqw`, lineHeight: 1, whiteSpace: 'nowrap' }}>
+      <Coins n={price} size={1} className="!gap-[0.15em] [&>svg]:!h-[0.66em] [&>svg]:!w-[0.66em]" />
     </span>
   );
 }
@@ -69,7 +72,7 @@ function PriceBadge({ x, y, w, h, price }: { x: number; y: number; w: number; h:
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       }}
     >
-      <CoinPrice price={price} size="3.3cqw" />
+      <CoinPrice price={price} size={3.3} maxW={w - 1.2} />
       <div style={{ fontSize: '1.8cqw', marginTop: '0.5cqw', letterSpacing: '0.05em', lineHeight: 1 }}>ONLY</div>
     </div>
   );
@@ -129,8 +132,8 @@ export function TicketCard({ ticketNo, drawTime, userName, ticketPrice, qrValue,
       {validPrice !== undefined && <>
         <PriceBadge x={44.4} y={12.4} w={7.7} h={9.1} price={validPrice} />
         <PriceBadge x={8.2} y={85.3} w={6.9} h={9.0} price={validPrice} />
-        <div style={{ ...pos(9.6, 61), textAlign: 'center', color: '#8f2144', fontFamily: pinkFont.fontFamily, fontWeight: 800, lineHeight: 1 }}>
-          <CoinPrice price={validPrice} size="3.6cqw" />
+        <div style={{ ...pos(9.6, 61), display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#8f2144', fontFamily: pinkFont.fontFamily, fontWeight: 800, lineHeight: 1 }}>
+          <CoinPrice price={validPrice} size={3.6} maxW={8} />
           <div style={{ fontSize: '2.1cqw', marginTop: '0.5cqw', letterSpacing: '0.05em' }}>ONLY</div>
         </div>
         <div style={{ ...pos(81.8, 62.4), width: '13.4cqw', height: '13.4cqw' }}>
@@ -139,9 +142,12 @@ export function TicketCard({ ticketNo, drawTime, userName, ticketPrice, qrValue,
             <polygon fill="url(#ticketBluePrice)" points={STAR} />
             <circle r="78" fill="none" stroke="#fff" strokeWidth="2.5" strokeDasharray="1 7" strokeLinecap="round" opacity="0.9" />
           </svg>
-          <div style={{ ...pos(50, 50), textAlign: 'center', color: '#fff', fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 800 }}>
+          <div style={{
+            ...pos(50, 50), display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4cqw',
+            color: '#fff', fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 800, lineHeight: 1,
+          }}>
             <div style={{ fontSize: '2cqw' }}>ONLY</div>
-            <CoinPrice price={validPrice} size="4.1cqw" />
+            <CoinPrice price={validPrice} size={4.1} maxW={9} />
           </div>
         </div>
       </>}

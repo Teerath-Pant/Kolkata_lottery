@@ -147,9 +147,20 @@ describe('http api', () => {
     expect(adj.body.balance).toBe(525);
     const log = (await call('/admin/audit-log', { token: admin.accessToken })).body.log;
     expect(log.map((l: any) => l.action).sort()).toEqual(['adjust_coins', 'select_winner', 'set_mode']);
+    const adjRow = log.find((l: any) => l.action === 'adjust_coins');
+    expect([adjRow.adminUsername, adjRow.targetUsername]).toEqual(['9999999999', '9000000003']);
+    expect(log.find((l: any) => l.action === 'set_mode').packageName).toBeTruthy();
+    const only = (await call('/admin/audit-log?action=set_mode', { token: admin.accessToken })).body.log;
+    expect(only.map((l: any) => l.action)).toEqual(['set_mode']);
+    const pg = (n: number) => call(`/admin/audit-log?pageSize=2&page=${n}`, { token: admin.accessToken }).then((r) => r.body);
+    const [p1, p2] = [await pg(1), await pg(2)];
+    expect([p1.total, p1.pages, p1.page, p2.page]).toEqual([3, 2, 1, 2]);
+    expect([...p1.log, ...p2.log].map((l: any) => l.id)).toEqual(log.map((l: any) => l.id));
+    expect((await pg(3)).log).toEqual([]);
     const pkg = { name: 'Mega', price: 500, prizeType: 'fixed', prizeValue: 9000, maxTickets: 50, theme: 'blue' };
     const create = (schedule: object) => call('/admin/packages', { token: admin.accessToken, body: { ...pkg, ...schedule } });
     expect((await create({ drawIntervalMinutes: 20 })).status).toBe(201);
+    expect((await call('/admin/packages', { token: admin.accessToken, body: { ...pkg, theme: 'teal', drawIntervalMinutes: 20 } })).status).toBe(201);
     expect((await create({ drawIntervalMinutes: null, dailyTime: '18:30' })).status).toBe(201);
     expect((await create({ drawIntervalMinutes: 20, dailyTime: '18:30' })).status).toBe(400); // both
     expect((await create({})).status).toBe(400); // neither
@@ -158,6 +169,13 @@ describe('http api', () => {
     const patch = (b: object) => call(`/admin/packages/${daily.id}`, { token: admin.accessToken, method: 'PATCH', body: b });
     expect((await patch({ drawIntervalMinutes: 15 })).status).toBe(400); // would leave both set
     expect((await patch({ drawIntervalMinutes: 15, dailyTime: null })).status).toBe(200);
+  });
+
+  it('results list only completed draws, never cancelled ones', async () => {
+    const draw = (await call('/packages')).body.packages[0].currentDraw;
+    await db.update(draws).set({ drawTime: new Date(Date.now() - 1000) }).where((await import('drizzle-orm')).eq(draws.id, draw.id));
+    await runDueDraws(); // no tickets sold -> cancelled
+    expect((await call('/results?packageId=1')).body.results).toHaveLength(0);
   });
 
   it('results + verify after a draw completes', async () => {

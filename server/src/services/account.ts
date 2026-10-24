@@ -4,7 +4,6 @@ import { config } from '../config';
 import { db } from '../db';
 import { loginThrottle, users, wallets } from '../db/schema';
 import { AppError } from '../lib/errors';
-import { consumeOtp, verifyOtp } from './otp';
 import { applyWallet } from './wallet';
 
 // bcrypt adds a unique random salt per password and stores it inside the hash string.
@@ -15,12 +14,10 @@ const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', config.BCRYPT_ROUNDS);
 export async function createUser(
   input: { username: string; name: string; password: string; phone?: string; role?: 'user' | 'admin' },
   bonus = config.SIGNUP_BONUS,
-  otp?: { mobile: string; codeHash: string },
 ) {
   const passwordHash = await hashPassword(input.password);
   try {
     return await db.transaction(async (tx) => {
-      if (otp) await consumeOtp(tx, otp.mobile, otp.codeHash); // in the same transaction: a failed signup keeps the code usable
       const [u] = await tx.insert(users).values({
         username: input.username, name: input.name, phone: input.phone ?? null, passwordHash, role: input.role ?? 'user',
       }).returning();
@@ -38,10 +35,9 @@ export async function createUser(
   }
 }
 
-/** Signup with a verified mobile number: the OTP must match, then it is spent together with creating the account. */
-export async function registerUser(input: { username: string; name: string; password: string; phone: string; otp: string }) {
-  const codeHash = await verifyOtp(input.phone, input.otp);
-  return createUser(input, config.SIGNUP_BONUS, { mobile: input.phone, codeHash });
+/** Signup with a mobile number (one account per number, no OTP). */
+export async function registerUser(input: { username: string; name: string; password: string; phone: string }) {
+  return createUser(input, config.SIGNUP_BONUS);
 }
 
 const LOCK_MS = config.LOGIN_LOCK_MINUTES * 60_000;
@@ -77,4 +73,4 @@ export async function checkLogin(username: string, password: string, now = new D
   return u;
 }
 
-export const publicUser = (u: typeof users.$inferSelect) => ({ id: u.id, username: u.username, name: u.name, role: u.role, verified: u.phone !== null });
+export const publicUser = (u: typeof users.$inferSelect) => ({ id: u.id, username: u.username, name: u.name, role: u.role, verified: false });

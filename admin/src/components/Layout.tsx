@@ -13,6 +13,7 @@ const NAV = [
   { to: '/packages', label: 'Packages' },
   { to: '/users', label: 'Users' },
   { to: '/winners', label: 'Winners' },
+  { to: '/activity', label: 'Activity' },
 ];
 
 const Burger = ({ open }: { open: boolean }) => (
@@ -100,7 +101,7 @@ export function Layout() {
       </AnimatePresence>
 
       <main className="mx-auto max-w-6xl p-3 sm:p-4"><Page key={loc.pathname}>{outlet}</Page></main>
-      <footer className="px-4 py-4 text-center text-[11px] text-muted">{APP_NAME} admin · Play coins only, no real value</footer>
+      <footer className="px-4 py-4 text-center text-[11px] text-muted"></footer>
     </div>
   );
 }

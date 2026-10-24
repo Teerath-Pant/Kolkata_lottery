@@ -19,7 +19,6 @@ export function More() {
           <div className="min-w-0 flex-1">
             <div className="truncate font-bold">{user?.name}</div>
             <div className="text-xs text-muted">{user?.username}</div>
-            {user?.verified && <span className="mt-1 inline-block rounded-pill bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">✔ Verified</span>}
           </div>
           <Coins n={balance} />
         </div>

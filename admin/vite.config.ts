@@ -12,9 +12,9 @@ const banner = (label: string, url: string): Plugin => ({
 });
 
 
-// In production the API server serves this build under /admin/.
-export default defineConfig(({ command }) => ({
-  base: command === 'build' ? '/admin/' : '/',
+// Served from its own domain (admin.kolkatalottery.com) at /.
+export default defineConfig(() => ({
+  base: '/',
   plugins: [react(), banner('ADMIN PANEL', 'http://localhost:5174/')],
   clearScreen: false,
   server: { port: 5174, proxy: { '/api': 'http://localhost:4000' } },

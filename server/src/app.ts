@@ -26,7 +26,6 @@ export function createApp() {
   });
   api.use(limiter(60_000, 300));
   api.use(['/auth/login', '/auth/register'], limiter(15 * 60_000, 30));
-  api.use('/auth/otp/request', limiter(15 * 60_000, 10)); // SMS costs money: tight per-IP cap on top of the per-number limits
   api.use('/auth/refresh', limiter(15 * 60_000, 120));
   api.get('/health', (_req, res) => res.json({ ok: true }));
   api.use(authRouter, gameRouter, adminRouter);

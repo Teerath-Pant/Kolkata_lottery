@@ -1,4 +1,4 @@
-import { FormEvent, InputHTMLAttributes, ReactNode, useEffect, useState } from 'react';
+import { FormEvent, InputHTMLAttributes, ReactNode, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Item, Page, item } from '../components/motion';
@@ -6,7 +6,6 @@ import { Button } from '../components/ui';
 import { useToast } from '../components/Toast';
 import { Logo, Skyline } from '../components/Logo';
 import { APP_NAME, MOTTO, TAGLINE } from '../config';
-import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { headerGradient } from '../theme';
 
@@ -14,7 +13,6 @@ const icon = { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke
 const LockIcon = () => <svg {...icon}><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /><circle cx="12" cy="15.5" r="1.3" /></svg>;
 const UserIcon = () => <svg {...icon}><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg>;
 const PhoneIcon = () => <svg {...icon}><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" /></svg>;
-const KeyIcon = () => <svg {...icon}><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M16 7l3 3" /></svg>;
 const EyeIcon = ({ off }: { off: boolean }) => (
   <svg {...icon}>
     <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" />
@@ -47,42 +45,19 @@ export function AuthPage() {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [forgot, setForgot] = useState(false);
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [cooldown]);
   const to = (loc.state as { from?: string } | null)?.from ?? '/';
   if (user) return <Navigate to={to} replace />;
   const isLogin = mode === 'login';
-
-  const phoneOk = /^[6-9]\d{9}$/.test(phone);
-  async function sendOtp() {
-    if (!phoneOk) { toast('Enter a valid 10-digit mobile number', 'error'); return; }
-    setSending(true);
-    try {
-      const r = await api<{ resendInSeconds: number; devOtp?: string }>('/auth/otp/request', { body: { phone } });
-      setOtpSent(true);
-      setCooldown(Math.max(r.resendInSeconds, 1));
-      toast(r.devOtp ? `Dev mode OTP: ${r.devOtp}` : `OTP sent to ${phone}`, 'info');
-    } catch (err) {
-      toast(err instanceof Error ? err.message : 'Could not send OTP', 'error');
-    } finally { setSending(false); }
-  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
       if (isLogin) await login(username, password);
-      else await register({ username, name, phone, otp, password });
+      else await register({ username, name, phone, password });
       nav(to, { replace: true });
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed', 'error');
@@ -137,21 +112,8 @@ export function AuthPage() {
             {!isLogin && (
               <motion.div key="phone" {...reveal} className="space-y-3 overflow-hidden">
                 <Field icon={<PhoneIcon />} type="tel" inputMode="numeric" maxLength={10} pattern="[6-9][0-9]{9}" title="10-digit mobile number"
-                  placeholder="Mobile number" aria-label="Mobile number" value={phone} style={{ paddingRight: 104 }}
-                  onChange={(e) => { setPhone(e.target.value.replace(/\D/g, '')); setOtpSent(false); setOtp(''); }} required autoComplete="tel-national"
-                  right={(
-                    <motion.button type="button" whileTap={{ scale: 0.92 }} onClick={sendOtp} disabled={sending || cooldown > 0 || !phoneOk}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-pill bg-brand px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">
-                      {sending ? '…' : cooldown > 0 ? `${cooldown}s` : otpSent ? 'Resend' : 'Send OTP'}
-                    </motion.button>
-                  )}
-                />
-                {otpSent && (
-                  <motion.div key="otp" {...reveal}>
-                    <Field icon={<KeyIcon />} inputMode="numeric" maxLength={6} pattern="[0-9]{6}" title="6-digit code" placeholder="6-digit OTP"
-                      aria-label="OTP" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} required autoComplete="one-time-code" />
-                  </motion.div>
-                )}
+                  placeholder="Mobile number" aria-label="Mobile number" value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))} required autoComplete="tel-national" />
               </motion.div>
             )}
           </AnimatePresence>
@@ -167,7 +129,7 @@ export function AuthPage() {
             )}
           />
 
-          <Button disabled={busy || (!isLogin && !otpSent)} className="!py-3.5 text-lg">{busy ? 'Please wait…' : isLogin ? 'Login' : 'Create Account'}</Button>
+          <Button disabled={busy} className="!py-3.5 text-lg">{busy ? 'Please wait…' : isLogin ? 'Login' : 'Create Account'}</Button>
 
           {isLogin && (
             <button type="button" onClick={() => setForgot((f) => !f)} className="block w-full text-center text-sm font-medium text-ink">

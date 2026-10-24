@@ -25,6 +25,14 @@ export const theme = {
     blue: { from: '#2f64e8', to: '#0a2a84', soft: '#e8efff', text: '#0a2a84' },
     purple: { from: '#8e3ee0', to: '#4a1587', soft: '#f1e8fd', text: '#4a1587' },
     pink: { from: '#ec3f9a', to: '#a3125f', soft: '#fde8f3', text: '#a3125f' },
+    orange: { from: '#f7811e', to: '#a4410a', soft: '#fff0e3', text: '#a4410a' },
+    yellow: { from: '#f2c418', to: '#a67c00', soft: '#fff8d9', text: '#7a5b00' },
+    teal: { from: '#14b8a6', to: '#0b5f57', soft: '#e3f8f5', text: '#0b5f57' },
+    cyan: { from: '#22b8e0', to: '#0b5e80', soft: '#e3f6fc', text: '#0b5e80' },
+    indigo: { from: '#5b5ef0', to: '#2a2a8f', soft: '#ebebfe', text: '#2a2a8f' },
+    maroon: { from: '#a8243f', to: '#55091c', soft: '#f9e6ea', text: '#55091c' },
+    brown: { from: '#a0673a', to: '#5a3416', soft: '#f6ece3', text: '#5a3416' },
+    black: { from: '#3d4454', to: '#0d1017', soft: '#eceef2', text: '#1b1f29' },
   },
 } as const;
 

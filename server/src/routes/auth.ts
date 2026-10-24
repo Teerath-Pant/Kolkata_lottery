@@ -8,7 +8,6 @@ import { AppError, notFound } from '../lib/errors';
 import { requireAuth } from '../middleware';
 import { passwordProblem } from '../lib/password';
 import { checkLogin, publicUser, registerUser } from '../services/account';
-import { requestOtp } from '../services/otp';
 import { endSession, rotateSession, startSession } from '../services/sessions';
 import { walletSummary } from '../services/wallet';
 
@@ -25,13 +24,8 @@ function sendAuth(req: Request, res: Response, status: number, u: typeof users.$
   res.status(status).json({ user: publicUser(u), ...(req.get('x-client') ? {} : t) });
 }
 
-authRouter.post('/auth/otp/request', async (req, res) => {
-  const b = z.object({ phone }).parse(req.body);
-  res.json(await requestOtp(b.phone));
-});
-
 authRouter.post('/auth/register', async (req, res) => {
-  const b = z.object({ username, name: z.string().trim().min(2).max(40), phone, otp: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code'), password: z.string() })
+  const b = z.object({ username, name: z.string().trim().min(2).max(40), phone, password: z.string() })
     .superRefine((v, ctx) => {
       const problem = passwordProblem(v.password, { username: v.username, phone: v.phone });
       if (problem) ctx.addIssue({ code: 'custom', path: ['password'], message: problem });

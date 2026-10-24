@@ -117,6 +117,17 @@ export function DrawPage() {
     }
   }, [d, qc, toast]);
 
+  // a cancelled draw has nothing to show: move on to the package's next open draw
+  const cancelledPkg = d?.status === "cancelled" ? d.packageId : undefined;
+  useEffect(() => {
+    if (cancelledPkg === undefined) return;
+    let stale = false;
+    api<Draw>(`/packages/${cancelledPkg}/current-draw`)
+      .then((next) => { if (!stale && String(next.id) !== id) nav(`/draw/${next.id}`, { replace: true }); })
+      .catch(() => {}); // no open draw (package inactive): stay, "Go to next draw" is still there
+    return () => { stale = true; };
+  }, [cancelledPkg, id, nav]);
+
   if (q.isLoading)
     return (
       <>
@@ -313,12 +324,6 @@ export function DrawPage() {
                 🎉 That is your ticket! Prize credited.
               </div>
             )}
-            <Link
-              to={`/verify/${d.id}`}
-              className="mt-2 inline-block text-sm font-semibold text-brand underline"
-            >
-              Verify this result
-            </Link>
           </div>
         )}
         {d.status === "completed" && d.winningTicketNo !== null && (

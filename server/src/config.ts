@@ -49,8 +49,6 @@ export function productionConfigProblems(c: z.infer<typeof schema>, env: NodeJS.
   if (c.JWT_ACCESS_SECRET === c.JWT_REFRESH_SECRET) problems.push('JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different');
   if (!env.ADMIN_PASSWORD) problems.push('ADMIN_PASSWORD must be set explicitly');
   else if (c.ADMIN_PASSWORD.length < 12 || c.ADMIN_PASSWORD === 'Admin@12345') problems.push('ADMIN_PASSWORD must be at least 12 characters and not the documented default');
-  if (c.SMS_PROVIDER === 'console') problems.push('SMS_PROVIDER=console only prints OTPs to the log; set SMS_PROVIDER=webhook and SMS_WEBHOOK_URL');
-  else if (!c.SMS_WEBHOOK_URL) problems.push('SMS_WEBHOOK_URL is required when SMS_PROVIDER=webhook');
   return problems;
 }
 

@@ -16,6 +16,7 @@ export default defineConfig({
       OTP_RESEND_SECONDS: '0',
       ADMIN_USERNAME: '9999999999',
       ADMIN_PASSWORD: 'Admin@12345',
+      TRUST_PROXY: '0', // the server's real .env (behind Caddy) sets 1; tests must not inherit it
     },
   },
 });

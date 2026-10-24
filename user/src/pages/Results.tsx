@@ -157,21 +157,23 @@ function ResultDetail({
     placeholderData: keepPreviousData,
   });
   const ticketDraw = viewedDrawn ? d : lastDrawnId !== undefined ? lastDrawn.data : undefined;
+  // a cancelled draw has no result: show the package's last winning draw instead
+  const r = d?.status === 'cancelled' && ticketDraw ? ticketDraw : d;
 
   const header = (
     <div className="relative flex items-center justify-center px-4 py-3 text-white" style={headerGradient}>
       <button type="button" onClick={onBack} aria-label="Back" className="absolute left-3 p-2 text-2xl leading-none">‹</button>
       <h1 className="text-lg font-bold">Result Details</h1>
-      {d && (
+      {r && (
         <span className="absolute right-3 rounded-pill bg-white/15 px-2 py-1 text-[11px] font-semibold">
-          {new Date(d.drawTime).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-')}
+          {new Date(r.drawTime).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-')}
         </span>
       )}
     </div>
   );
 
   if (q.isLoading) return <div>{header}<Spinner /></div>;
-  if (q.error || !d) return <div>{header}<ErrorBox error={q.error} retry={() => q.refetch()} /></div>;
+  if (q.error || !d || !r) return <div>{header}<ErrorBox error={q.error} retry={() => q.refetch()} /></div>;
 
   const c = colorOf(d.packageId);
 
@@ -199,10 +201,10 @@ function ResultDetail({
           <div className="min-w-0 flex-1">
             <div className="text-xs font-semibold text-muted">Winning Number</div>
             <div className="text-2xl font-extrabold tabular-nums" style={{ color: c }}>
-              {d.winningTicketNo !== null ? ticketLabel(d.winningTicketNo) : d.status === 'cancelled' ? 'Cancelled' : 'Awaiting draw'}
+              {r.winningTicketNo !== null ? ticketLabel(r.winningTicketNo) : r.status === 'cancelled' ? 'No result yet' : 'Awaiting draw'}
             </div>
           </div>
-          {d.winningTicketNo !== null && (
+          {r.winningTicketNo !== null && (
             <span className="shrink-0 rounded-pill px-3 py-1 text-xs font-bold text-white" style={{ background: c }}>🏆 1st Prize</span>
           )}
         </div>
@@ -242,13 +244,10 @@ function ResultDetail({
         {/* Digit match: digits are matched from the left of the winning number */}
         <div className="overflow-hidden rounded-card border border-blue-100 bg-white shadow-[0_8px_24px_rgba(30,86,200,0.14)]">
           <div className="bg-gradient-to-r from-blue-700 to-indigo-600 px-3 py-2 text-sm font-extrabold text-white">Digit Match Prize</div>
-          <div className="bg-blue-50 px-3 py-1.5 text-[10px] text-muted">
-            Match the winning number digit by digit from the left. Each ticket gets the prize for its longest match.
-          </div>
-          <div className="grid grid-cols-[1fr_auto_auto] gap-2 bg-blue-50 px-3 pb-1.5 text-[10px] font-bold text-muted">
+          <div className="grid grid-cols-[1fr_auto_auto] gap-2 bg-blue-50 px-3 py-1.5 text-[10px] font-bold text-muted">
             <span>Match Type</span><span className="text-right">Winning Amount</span><span className="text-right">Number</span>
           </div>
-          {[{ matchDigits: 6, prize: d.prizeAmount, winners: d.status === 'completed' && d.winningTicketNo !== null ? 1 : null }, ...d.tiers]
+          {[{ matchDigits: 6, prize: r.prizeAmount, winners: r.status === 'completed' && r.winningTicketNo !== null ? 1 : null }, ...r.tiers]
             .filter((t) => t.matchDigits === 6 || t.prize > 0)
             .map((t) => (
               <div key={t.matchDigits} className={`grid grid-cols-[1fr_auto_auto] items-center gap-2 px-3 py-2 text-xs ${TIER_BG[t.matchDigits]}`}>
@@ -261,7 +260,7 @@ function ResultDetail({
                 </div>
                 <div className="text-right font-extrabold"><Coins n={t.prize} size={11} /></div>
                 <div className="min-w-10 text-right font-extrabold tabular-nums">
-                  {d.winningTicketNo !== null ? ticketLabel(d.winningTicketNo).slice(0, t.matchDigits) : '•'.repeat(t.matchDigits)}
+                  {r.winningTicketNo !== null ? ticketLabel(r.winningTicketNo).slice(0, t.matchDigits) : '•'.repeat(t.matchDigits)}
                 </div>
               </div>
             ))}

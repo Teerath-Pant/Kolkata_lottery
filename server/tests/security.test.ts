@@ -120,11 +120,6 @@ describe('production config guard', () => {
     expect(productionConfigProblems({ ...good, JWT_REFRESH_SECRET: good.JWT_ACCESS_SECRET }, { ADMIN_PASSWORD: 'x' }).join()).toContain('must be different');
   });
 
-  it('refuses the console SMS provider (it only prints codes to the log)', () => {
-    expect(productionConfigProblems({ ...good, SMS_PROVIDER: 'console' }, { ADMIN_PASSWORD: good.ADMIN_PASSWORD }).join()).toContain('SMS_PROVIDER');
-    expect(productionConfigProblems({ ...good, SMS_WEBHOOK_URL: undefined }, { ADMIN_PASSWORD: good.ADMIN_PASSWORD }).join()).toContain('SMS_WEBHOOK_URL');
-  });
-
   it('requires ADMIN_PASSWORD to be set explicitly (the built-in default does not count)', () => {
     expect(productionConfigProblems(good, {}).join()).toContain('ADMIN_PASSWORD must be set explicitly');
   });

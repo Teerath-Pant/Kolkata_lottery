@@ -8,7 +8,9 @@ export const ledgerTypeEnum = pgEnum('ledger_type', [
   'signup_bonus', 'daily_claim', 'ticket_purchase', 'prize', 'refund', 'admin_adjust',
 ]);
 export const prizeTypeEnum = pgEnum('prize_type', ['fixed', 'pool_percent']);
-export const themeEnum = pgEnum('theme', ['green', 'red', 'blue', 'purple', 'pink']);
+export const themeEnum = pgEnum('theme', [
+  'green', 'red', 'blue', 'purple', 'pink', 'orange', 'yellow', 'teal', 'cyan', 'indigo', 'maroon', 'brown', 'black',
+]);
 export const drawStatusEnum = pgEnum('draw_status', ['open', 'drawing', 'completed', 'cancelled']);
 export const drawModeEnum = pgEnum('draw_mode', ['random', 'admin_selected']);
 
@@ -57,6 +59,8 @@ export const packages = pgTable('packages', {
   dailyTime: text('daily_time'),
   theme: themeEnum('theme').notNull(),
   isActive: boolean('is_active').notNull().default(true),
+  // soft delete: the row stays so past draws, results and the audit log keep their package
+  deletedAt: ts('deleted_at'),
 }, (t) => [
   check('pkg_price_pos', sql`${t.price} > 0`),
   check('pkg_max_range', sql`${t.maxTickets} BETWEEN 1 AND 9999`),
@@ -136,7 +140,7 @@ export const drawTierWinners = pgTable('draw_tier_winners', {
   prize: big('prize').notNull(),
   createdAt: ts('created_at').notNull().defaultNow(),
 }, (t) => [
-  uniqueIndex('tier_winner_once_idx').on(t.drawId, t.userId),
+  uniqueIndex('tier_winner_once_idx').on(t.drawId, t.ticketNo),
   index('tier_winner_draw_idx').on(t.drawId),
   check('tier_winner_digits_range', sql`${t.matchDigits} BETWEEN 1 AND 5`),
 ]);

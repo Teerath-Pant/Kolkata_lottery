@@ -107,23 +107,8 @@ export function Book() {
   return (
     <div>
       <PageHeader title="Book Ticket" style={themeGradient(d.theme)} />
-      <div className="space-y-4 p-4 md:mx-auto md:grid md:max-w-5xl md:grid-cols-[1fr_340px] md:grid-rows-[auto_1fr] md:gap-x-6 md:gap-y-4 md:space-y-0 md:px-6 md:pb-12 md:[grid-template-areas:'grid_info'_'grid_actions']">
-        {booked.length > 0 && (
-          <section className="space-y-3 rounded-card bg-green-50 p-3 md:col-span-2" aria-label="Booking confirmation">
-            <h2 className="font-bold text-green-900">Booking confirmed</h2>
-            {booked.map((ticketNo) => (
-              <TicketCard
-                key={ticketNo}
-                ticketNo={ticketNo}
-                drawTime={d.drawTime}
-                userName={me?.name}
-                ticketPrice={d.ticketPrice}
-                qrValue={`${location.origin}/verify/${d.id}?t=${ticketLabel(ticketNo)}`}
-              />
-            ))}
-          </section>
-        )}
-        <div className="space-y-4 md:[grid-area:info]">
+      <div className="space-y-4 p-4 md:mx-auto md:grid md:max-w-5xl md:grid-cols-[minmax(0,1fr)_340px] md:grid-rows-[auto_1fr] md:gap-x-6 md:gap-y-4 md:space-y-0 md:px-6 md:pb-6 md:[grid-template-areas:'grid_info'_'grid_actions']">
+        <div className="min-w-0 space-y-4 md:[grid-area:info]">
           <Item className="rounded-card p-3 text-white shadow-card md:p-4" style={themeGradient(d.theme)}>
             <div className="flex items-center justify-between">
               <div className="text-lg font-bold">{d.packageName} Draw</div>
@@ -142,7 +127,7 @@ export function Book() {
           {closed && <Item className="rounded-btn bg-red-50 p-3 text-center text-sm font-semibold text-bad">Ticket sales for this draw are closed.</Item>}
         </div>
 
-        <Item className="md:rounded-card md:bg-white md:p-5 md:shadow-card md:[grid-area:grid]">
+        <Item className="min-w-0 md:rounded-card md:bg-white md:p-5 md:shadow-card md:[grid-area:grid]">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="font-semibold">
               Select Number{qty > 1 ? 's' : ''} <span className="text-xs font-normal text-muted">({filled.length}/{qty})</span>
@@ -179,7 +164,7 @@ export function Book() {
           <p className="mt-2 text-center text-[11px] text-muted">Sold numbers are swapped for fresh ones automatically.</p>
         </Item>
 
-        <div className="space-y-4 md:sticky md:top-24 md:[grid-area:actions]">
+        <div className="min-w-0 space-y-4 md:sticky md:top-24 md:self-start md:[grid-area:actions]">
           <motion.button
             variants={itemV} whileTap={{ scale: 0.96 }}
             disabled={closed}
@@ -241,9 +226,28 @@ export function Book() {
           <Button disabled={!ready || buy.isPending} onClick={() => buy.mutate()}>
             {buy.isPending ? 'Booking…' : <>Confirm · <Coins n={total} className="text-white" /></>}
           </Button>
-          <p className="text-center text-[11px] text-muted">Confirming deducts coins from your wallet. Play coins only, no real value.</p>
+          <p className="text-center text-[11px] text-muted">Confirming deducts ammount from your wallet.</p>
         </div>
       </div>
+      {booked.length > 0 && (
+        <div className="px-4 pb-4 md:mx-auto md:max-w-5xl md:px-6 md:pb-12">
+          <section className="rounded-card bg-green-50 p-3 md:p-4" aria-label="Booking confirmation">
+            <h2 className="mb-3 font-bold text-green-900">Booking confirmed</h2>
+            <div className="mx-auto grid max-w-xl gap-3 md:max-w-none md:grid-cols-2">
+              {booked.map((ticketNo) => (
+                <TicketCard
+                  key={ticketNo}
+                  ticketNo={ticketNo}
+                  drawTime={d.drawTime}
+                  userName={me?.name}
+                  ticketPrice={d.ticketPrice}
+                  qrValue={`${location.origin}/verify/${d.id}?t=${ticketLabel(ticketNo)}`}
+                />
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
