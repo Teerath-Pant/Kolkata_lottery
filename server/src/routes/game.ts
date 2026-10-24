@@ -2,11 +2,11 @@ import { Router } from 'express';
 import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db';
-import { draws, packages, tickets, users } from '../db/schema';
+import { drawTierWinners, draws, packages, tickets, users } from '../db/schema';
 import { notFound } from '../lib/errors';
 import { optionalAuth, requireAuth } from '../middleware';
 import { buyTicket } from '../services/buy';
-import { publicDraw, takenNumbers, verifyData } from '../services/draws';
+import { publicDraw, publicPackages, takenNumbers, verifyData } from '../services/draws';
 import { walletSummary } from '../services/wallet';
 
 export const gameRouter = Router();
@@ -19,12 +19,7 @@ async function currentDraw(packageId: number) {
 }
 
 gameRouter.get('/packages', optionalAuth, async (req, res) => {
-  const pkgs = await db.select().from(packages).where(eq(packages.isActive, true)).orderBy(packages.price);
-  const out = await Promise.all(pkgs.map(async (p) => {
-    const did = await currentDraw(p.id);
-    return { ...p, currentDraw: did ? await publicDraw(did, req.user?.id) : null };
-  }));
-  res.json({ packages: out, serverTime: new Date().toISOString() });
+  res.json({ packages: await publicPackages(req.user?.id), serverTime: new Date().toISOString() });
 });
 
 gameRouter.get('/packages/:id/current-draw', optionalAuth, async (req, res) => {
@@ -63,7 +58,9 @@ gameRouter.get('/me/tickets', requireAuth, async (req, res) => {
     packageName: packages.name, theme: packages.theme, price: draws.ticketPrice, status: draws.status, mode: draws.mode,
     drawTime: draws.drawTime, winningTicketNo: draws.winningTicketNo, prizeAmount: draws.prizeAmount,
     won: sql<boolean>`${draws.winnerUserId} = ${tickets.userId}`,
+    matchDigits: drawTierWinners.matchDigits, tierPrize: drawTierWinners.prize,
   }).from(tickets).innerJoin(draws, eq(draws.id, tickets.drawId)).innerJoin(packages, eq(packages.id, draws.packageId))
+    .leftJoin(drawTierWinners, and(eq(drawTierWinners.drawId, tickets.drawId), eq(drawTierWinners.ticketNo, tickets.ticketNo)))
     .where(eq(tickets.userId, req.user!.id)).orderBy(desc(tickets.createdAt)).limit(200);
   res.json({ tickets: rows });
 });
@@ -83,7 +80,7 @@ gameRouter.get('/results', async (req, res) => {
     winningTicketNo: draws.winningTicketNo, prizeAmount: draws.prizeAmount, winnerName: users.name,
   }).from(draws).innerJoin(packages, eq(packages.id, draws.packageId)).leftJoin(users, eq(users.id, draws.winnerUserId))
     .where(and(
-      sql`${draws.status} IN ('completed','cancelled')`,
+      eq(draws.status, 'completed'), // cancelled draws have no result to show
       q.packageId ? eq(draws.packageId, q.packageId) : undefined,
       start ? gte(draws.drawTime, start) : undefined,
       start ? lt(draws.drawTime, new Date(start.getTime() + 86_400_000)) : undefined,

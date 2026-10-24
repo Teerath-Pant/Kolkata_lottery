@@ -1,6 +1,7 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { Exec, db } from '../db';
-import { draws, packages, tickets, users } from '../db/schema';
+import { config } from '../config';
+import { drawTierPrizes, drawTierWinners, draws, packageTierPrizes, packages, tickets, users } from '../db/schema';
 import { AppError, notFound } from '../lib/errors';
 import { newSeed, sha256 } from '../lib/fair';
 
@@ -16,7 +17,25 @@ export async function openDraw(tx: Exec, pkg: Pkg, drawTime: Date) {
     maxTickets: pkg.maxTickets,
     serverSeed: seed, serverSeedHash: sha256(seed),
   }).returning();
+  await snapshotTierPrizes(tx, d.id, pkg.id);
   return d;
+}
+
+/** Copy the package's current tier prizes onto the draw so later edits only affect future draws. */
+export async function snapshotTierPrizes(tx: Exec, drawId: number, packageId: number) {
+  const rows = await tx.select().from(packageTierPrizes).where(eq(packageTierPrizes.packageId, packageId));
+  if (rows.length) {
+    await tx.insert(drawTierPrizes).values(rows.map((r) => ({ drawId, matchDigits: r.matchDigits, prize: r.prize })))
+      .onConflictDoNothing();
+  }
+}
+
+/** Upsert the package's tier prizes (admin-defined; 0 disables a tier). */
+export async function saveTierPrizes(tx: Exec, packageId: number, prizes: { matchDigits: number; prize: number }[]) {
+  for (const p of prizes) {
+    await tx.insert(packageTierPrizes).values({ packageId, ...p })
+      .onConflictDoUpdate({ target: [packageTierPrizes.packageId, packageTierPrizes.matchDigits], set: { prize: p.prize } });
+  }
 }
 
 /** First slot strictly after `after` on the package's interval grid anchored at `anchor`. */
@@ -50,22 +69,36 @@ export const computePrize = (d: Pick<Draw, 'prizeType' | 'prizeValue' | 'ticketP
 
 const maskName = (n: string) => `${n.slice(0, 1)}***`;
 
-/** Public view of a draw. The server seed is only exposed once the draw is finished. */
-export async function publicDraw(drawId: number, viewerId?: number) {
-  const [row] = await db.select({ d: draws, p: packages }).from(draws)
-    .innerJoin(packages, eq(packages.id, draws.packageId)).where(eq(draws.id, drawId));
-  if (!row) throw notFound('Draw');
-  const { d, p } = row;
-  const [{ sold }] = await db.select({ sold: sql<number>`count(*)::int` }).from(tickets).where(eq(tickets.drawId, d.id));
-  let winnerName: string | null = null;
-  if (d.winnerUserId) {
-    const [u] = await db.select({ name: users.name }).from(users).where(eq(users.id, d.winnerUserId));
-    winnerName = u ? maskName(u.name) : null;
+/** Everything about a draw that is the same for every viewer (safe to cache briefly). */
+async function baseDraws(ids: number[]) {
+  const out = new Map<number, { view: ReturnType<typeof baseView>; winnerUserId: number | null }>();
+  if (!ids.length) return out;
+  // 5 queries for any number of draws (the /packages page used to run ~6 per draw)
+  const rows = await db.select({ d: draws, p: packages }).from(draws)
+    .innerJoin(packages, eq(packages.id, draws.packageId)).where(inArray(draws.id, ids));
+  const sold = await db.select({ drawId: tickets.drawId, n: sql<number>`count(*)::int` }).from(tickets)
+    .where(inArray(tickets.drawId, ids)).groupBy(tickets.drawId);
+  const tierRows = await db.select().from(drawTierPrizes).where(inArray(drawTierPrizes.drawId, ids));
+  const tierWinners = await db.select({ drawId: drawTierWinners.drawId, k: drawTierWinners.matchDigits, n: sql<number>`count(*)::int` })
+    .from(drawTierWinners).where(inArray(drawTierWinners.drawId, ids)).groupBy(drawTierWinners.drawId, drawTierWinners.matchDigits);
+  const winnerIds = [...new Set(rows.map((r) => r.d.winnerUserId).filter((x): x is number => x !== null))];
+  const names = winnerIds.length
+    ? new Map((await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, winnerIds))).map((u) => [u.id, u.name]))
+    : new Map<number, string>();
+
+  for (const { d, p } of rows) {
+    const soldCount = sold.find((x) => x.drawId === d.id)?.n ?? 0;
+    const tiers = tierRows.filter((t) => t.drawId === d.id).sort((x, y) => y.matchDigits - x.matchDigits).map((t) => ({
+      matchDigits: t.matchDigits, prize: t.prize,
+      winners: d.status === 'completed' ? (tierWinners.find((w) => w.drawId === d.id && w.k === t.matchDigits)?.n ?? 0) : null,
+    }));
+    const winnerName = d.winnerUserId ? names.get(d.winnerUserId) : undefined;
+    out.set(d.id, { winnerUserId: d.winnerUserId, view: baseView(d, p, soldCount, tiers, winnerName ? maskName(winnerName) : null) });
   }
-  const myTicketNos = viewerId
-    ? (await db.select({ n: tickets.ticketNo }).from(tickets)
-      .where(and(eq(tickets.drawId, d.id), eq(tickets.userId, viewerId))).orderBy(asc(tickets.ticketNo))).map((t) => t.n)
-    : [];
+  return out;
+}
+
+function baseView(d: Draw, p: Pkg, sold: number, tiers: { matchDigits: number; prize: number; winners: number | null }[], winnerName: string | null) {
   const finished = d.status === 'completed' || d.status === 'cancelled';
   return {
     id: d.id, packageId: d.packageId, packageName: p.name, theme: p.theme,
@@ -74,11 +107,69 @@ export async function publicDraw(drawId: number, viewerId?: number) {
     prizeAmount: d.prizeAmount ?? computePrize(d, sold),
     maxTickets: d.maxTickets, soldCount: sold,
     serverSeedHash: d.serverSeedHash,
-    serverSeed: finished ? d.serverSeed : null,
-    winningTicketNo: d.winningTicketNo, winMethod: d.winMethod, winnerName,
-    myTicketNos, iWon: !!viewerId && d.winnerUserId === viewerId,
-    serverTime: new Date().toISOString(),
+    serverSeed: finished ? d.serverSeed : null, // the seed is only exposed once the draw is finished
+    winningTicketNo: d.winningTicketNo, winMethod: d.winMethod, winnerName, completedAt: d.completedAt,
+    tiers,
   };
+}
+
+type Base = Awaited<ReturnType<typeof baseDraws>>;
+
+/** The viewer-specific part: their own ticket numbers and consolation prize. 2 queries for any number of draws. */
+async function withViewer(ids: number[], base: Base, viewerId?: number) {
+  const mine = new Map<number, number[]>();
+  const tier = new Map<number, { matchDigits: number; prize: number }>();
+  if (viewerId && ids.length) {
+    for (const t of await db.select({ drawId: tickets.drawId, n: tickets.ticketNo }).from(tickets)
+      .where(and(inArray(tickets.drawId, ids), eq(tickets.userId, viewerId))).orderBy(asc(tickets.ticketNo))) {
+      mine.set(t.drawId, [...(mine.get(t.drawId) ?? []), t.n]);
+    }
+    for (const t of await db.select({ drawId: drawTierWinners.drawId, matchDigits: drawTierWinners.matchDigits, prize: drawTierWinners.prize })
+      .from(drawTierWinners).where(and(inArray(drawTierWinners.drawId, ids), eq(drawTierWinners.userId, viewerId)))) {
+      const prev = tier.get(t.drawId); // several winning tickets: best match shown, prizes summed
+      tier.set(t.drawId, { matchDigits: Math.max(prev?.matchDigits ?? 0, t.matchDigits), prize: (prev?.prize ?? 0) + t.prize });
+    }
+  }
+  const serverTime = new Date().toISOString(); // always fresh, even when `base` came from the cache: countdowns rely on it
+  return ids.flatMap((id) => {
+    const b = base.get(id);
+    return b ? [{ ...b.view, myTicketNos: mine.get(id) ?? [], myTier: tier.get(id) ?? null, iWon: !!viewerId && b.winnerUserId === viewerId, serverTime }] : [];
+  });
+}
+
+/** Public view of a draw. The server seed is only exposed once the draw is finished. */
+export async function publicDraw(drawId: number, viewerId?: number) {
+  const [d] = await withViewer([drawId], await baseDraws([drawId]), viewerId);
+  if (!d) throw notFound('Draw');
+  return d;
+}
+
+// GET /packages is public and polled by every open home screen: build the viewer-independent part once per
+// PACKAGES_CACHE_MS and share it (also while it is still loading), then add the viewer's own data on top.
+let packagesCache: { at: number; value: Promise<{ pkgs: Pkg[]; open: Map<number, number>; base: Base }> } | null = null;
+export const invalidatePublicCache = () => { packagesCache = null; };
+
+async function loadPackagesBase() {
+  const pkgs = await db.select().from(packages).where(eq(packages.isActive, true)).orderBy(packages.price);
+  const openRows = pkgs.length
+    ? await db.select({ id: draws.id, packageId: draws.packageId }).from(draws)
+      .where(and(eq(draws.status, 'open'), inArray(draws.packageId, pkgs.map((p) => p.id))))
+    : [];
+  const open = new Map(openRows.map((r) => [r.packageId, r.id]));
+  return { pkgs, open, base: await baseDraws([...open.values()]) };
+}
+
+export async function publicPackages(viewerId?: number) {
+  const ttl = config.PACKAGES_CACHE_MS;
+  if (!packagesCache || ttl <= 0 || Date.now() - packagesCache.at > ttl) {
+    const entry = { at: Date.now(), value: loadPackagesBase() };
+    packagesCache = entry;
+    entry.value.catch(() => { if (packagesCache === entry) packagesCache = null; });
+  }
+  const { pkgs, open, base } = await packagesCache.value;
+  const ids = [...open.values()];
+  const views = new Map((await withViewer(ids, base, viewerId)).map((v) => [v.id, v]));
+  return pkgs.map((p) => ({ ...p, currentDraw: views.get(open.get(p.id) ?? -1) ?? null }));
 }
 
 /** Ticket numbers are random 6-digit values; max_tickets caps how many get sold. */

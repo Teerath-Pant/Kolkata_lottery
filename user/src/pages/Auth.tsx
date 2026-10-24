@@ -4,16 +4,15 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Item, Page, item } from '../components/motion';
 import { Button } from '../components/ui';
 import { useToast } from '../components/Toast';
-import { Footer } from '../components/Layout';
 import { Logo, Skyline } from '../components/Logo';
-import { APP_NAME, COIN_NOTE, MOTTO, TAGLINE } from '../config';
+import { APP_NAME, MOTTO, TAGLINE } from '../config';
 import { useAuth } from '../lib/auth';
 import { headerGradient } from '../theme';
 
 const icon = { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-const PhoneIcon = () => <svg {...icon}><path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2" /></svg>;
 const LockIcon = () => <svg {...icon}><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /><circle cx="12" cy="15.5" r="1.3" /></svg>;
 const UserIcon = () => <svg {...icon}><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg>;
+const PhoneIcon = () => <svg {...icon}><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" /></svg>;
 const EyeIcon = ({ off }: { off: boolean }) => (
   <svg {...icon}>
     <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" />
@@ -42,9 +41,10 @@ export function AuthPage() {
   const loc = useLocation();
   const toast = useToast();
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [mobile, setMobile] = useState('');
+  const [username, setUsername] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [forgot, setForgot] = useState(false);
@@ -56,8 +56,8 @@ export function AuthPage() {
     e.preventDefault();
     setBusy(true);
     try {
-      if (isLogin) await login(mobile, password);
-      else await register(mobile, name, password);
+      if (isLogin) await login(username, password);
+      else await register({ username, name, phone, password });
       nav(to, { replace: true });
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed', 'error');
@@ -79,7 +79,6 @@ export function AuthPage() {
           <p className="mt-5 -rotate-3 font-script text-2xl font-bold leading-8 text-gold-light lg:text-3xl lg:leading-9">
             {MOTTO.split('|').map((l) => <span key={l} className="block">{l}</span>)}
           </p>
-          <p className="mt-4 text-xs text-white/70">🪙 {COIN_NOTE}</p>
         </div>
         <Skyline fade={false} slice className="block h-[22vh] min-h-[110px] w-full shrink-0 opacity-70" />
       </Item>
@@ -95,12 +94,12 @@ export function AuthPage() {
         </Item>
         <Item className="hidden md:block">
           <h2 className="text-3xl font-bold text-brand-dark">{isLogin ? 'Welcome back' : 'Create your account'}</h2>
-          <p className="mt-1 text-sm text-muted">{isLogin ? 'Login with your mobile number to play.' : 'Sign up and get free starting coins.'}</p>
+          <p className="mt-1 text-sm text-muted">{isLogin ? 'Login with your User ID to play.' : 'Sign up and get free starting coins.'}</p>
         </Item>
 
         <motion.form variants={item} onSubmit={submit} className="mt-6 space-y-3">
-          <Field icon={<PhoneIcon />} inputMode="numeric" maxLength={10} placeholder="Mobile Number" aria-label="Mobile number" value={mobile}
-            onChange={(e) => setMobile(e.target.value.replace(/\D/g, ''))} required autoComplete="username" />
+          <Field icon={<UserIcon />} maxLength={20} minLength={4} pattern="[A-Za-z0-9_]{4,20}" title="4-20 letters, digits or underscore" placeholder={isLogin ? 'User ID' : 'Enter User ID'} aria-label="User ID" value={username}
+            onChange={(e) => setUsername(e.target.value.trim().toLowerCase())} required autoComplete="username" autoCapitalize="none" />
           <AnimatePresence initial={false}>
             {!isLogin && (
               <motion.div key="name" {...reveal} className="overflow-hidden">
@@ -109,9 +108,18 @@ export function AuthPage() {
               </motion.div>
             )}
           </AnimatePresence>
+          <AnimatePresence initial={false}>
+            {!isLogin && (
+              <motion.div key="phone" {...reveal} className="space-y-3 overflow-hidden">
+                <Field icon={<PhoneIcon />} type="tel" inputMode="numeric" maxLength={10} pattern="[6-9][0-9]{9}" title="10-digit mobile number"
+                  placeholder="Mobile number" aria-label="Mobile number" value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))} required autoComplete="tel-national" />
+              </motion.div>
+            )}
+          </AnimatePresence>
           <Field
-            icon={<LockIcon />} type={show ? 'text' : 'password'} placeholder={isLogin ? 'Password' : 'Password (min 6)'} aria-label="Password"
-            value={password} onChange={(e) => setPassword(e.target.value)} required minLength={isLogin ? 1 : 6}
+            icon={<LockIcon />} type={show ? 'text' : 'password'} placeholder={isLogin ? 'Password' : 'Password (8+, letters & digits)'} aria-label="Password"
+            value={password} onChange={(e) => setPassword(e.target.value)} required minLength={isLogin ? 1 : 8}
             autoComplete={isLogin ? 'current-password' : 'new-password'}
             right={(
               <motion.button type="button" whileTap={{ scale: 0.8 }} onClick={() => setShow((s) => !s)}
@@ -131,7 +139,7 @@ export function AuthPage() {
           <AnimatePresence initial={false}>
             {isLogin && forgot && (
               <motion.p key="forgot" {...reveal} className="overflow-hidden rounded-btn bg-brand-light px-3 py-2.5 text-center text-xs text-brand-dark">
-                Password reset is done by support. Contact the admin with your registered mobile number.
+                Password reset is done by support. Contact the admin with your User ID.
               </motion.p>
             )}
           </AnimatePresence>
@@ -143,14 +151,6 @@ export function AuthPage() {
           <Button type="button" variant="outline" onClick={switchMode} className="!py-3 text-[15px]">
             {isLogin ? 'New User? Register Here' : 'Already have an account? Login'}
           </Button>
-
-          <AnimatePresence initial={false}>
-            {!isLogin && (
-              <motion.p key="coins" {...reveal} className="overflow-hidden rounded-btn bg-gold-light px-3 py-2.5 text-center text-xs font-medium text-[#6b4a00]">
-                🪙 {COIN_NOTE}. Coins cannot be bought or cashed out. You get free starting coins on signup.
-              </motion.p>
-            )}
-          </AnimatePresence>
         </motion.form>
       </div>
 
@@ -160,7 +160,6 @@ export function AuthPage() {
         </p>
         <Skyline className="block w-full" />
       </Item>
-      <Footer className="bg-[#dbe7ff] !pt-1 md:bg-transparent md:!pt-6" />
       </div>
     </Page>
   );

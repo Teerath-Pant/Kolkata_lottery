@@ -1,8 +1,9 @@
 import { and, asc, eq, lte } from 'drizzle-orm';
 import { db } from '../db';
-import { adminAuditLog, draws, packages, tickets } from '../db/schema';
+import { adminAuditLog, drawTierPrizes, drawTierWinners, draws, packages, tickets } from '../db/schema';
 import { pickWinner } from '../lib/fair';
-import { computePrize, nextDrawFor, openDraw } from './draws';
+import { prefixMatch } from '../lib/tiers';
+import { computePrize, invalidatePublicCache, nextDrawFor, openDraw } from './draws';
 import { applyWallet } from './wallet';
 
 export type DrawOutcome = 'skipped' | 'completed' | 'cancelled_no_tickets';
@@ -12,6 +13,12 @@ export type DrawOutcome = 'skipped' | 'completed' | 'cancelled_no_tickets';
  * only matches once, so a concurrent or repeated run gets zero rows and returns 'skipped'.
  */
 export async function executeDraw(drawId: number, now = new Date()): Promise<DrawOutcome> {
+  const outcome = await executeDrawTx(drawId, now);
+  if (outcome !== 'skipped') invalidatePublicCache();
+  return outcome;
+}
+
+async function executeDrawTx(drawId: number, now: Date): Promise<DrawOutcome> {
   return db.transaction(async (tx) => {
     const [d] = await tx.update(draws).set({ status: 'drawing' })
       .where(and(eq(draws.id, drawId), eq(draws.status, 'open'), lte(draws.drawTime, now))).returning();
@@ -44,7 +51,24 @@ export async function executeDraw(drawId: number, now = new Date()): Promise<Dra
       }
       const winner = sold.find((t) => t.ticketNo === winningNo)!;
       const prize = computePrize(d, sold.length);
-      if (prize > 0) await applyWallet(tx, winner.userId, prize, 'prize', d.id);
+      // one 'prize' ledger row per user per draw (ledger_pay_once_idx): jackpot + every tier-winning ticket summed
+      const payout = new Map<number, number>();
+      const credit = (userId: number, amount: number) => payout.set(userId, (payout.get(userId) ?? 0) + amount);
+      if (prize > 0) credit(winner.userId, prize);
+
+      // consolation prizes: each ticket's leading-digit match with the winning number (admin-set amounts)
+      const tierPrize = new Map(
+        (await tx.select().from(drawTierPrizes).where(eq(drawTierPrizes.drawId, d.id))).map((r) => [r.matchDigits, r.prize]),
+      );
+      for (const t of sold) {
+        if (t.ticketNo === winningNo) continue;
+        const k = prefixMatch(winningNo, t.ticketNo);
+        const amount = tierPrize.get(k) ?? 0;
+        if (k < 1 || amount <= 0) continue;
+        credit(t.userId, amount);
+        await tx.insert(drawTierWinners).values({ drawId: d.id, userId: t.userId, ticketNo: t.ticketNo, matchDigits: k, prize: amount });
+      }
+      for (const [userId, amount] of payout) await applyWallet(tx, userId, amount, 'prize', d.id);
       await tx.update(draws).set({
         status: 'completed', winningTicketNo: winningNo, winnerUserId: winner.userId,
         prizeAmount: prize, winMethod: method, ...reveal,

@@ -18,8 +18,8 @@ GAME RULES
    a) "Random Number": server assigns a free number, or
    b) "Pick Number": UI shows 10 free numbers; when one sells it is replaced by a new one. User picks one.
 4. Each draw has a fixed draw_time. At that time the system announces the winning ticket number, credits the prize coins to the winner, and closes the draw. The next draw for that package opens automatically.
-5. Draw mode is set per draw by admin: RANDOM (server CSPRNG) or ADMIN_SELECTED (admin picks the winning ticket before draw_time). The mode MUST be shown publicly on the draw screen as a badge: "Random draw" or "Admin-selected winner". Never hide it.
-6. If no tickets sold, skip the draw and open the next. If tickets sold are below package min_tickets, cancel the draw and refund everyone.
+5. Draw mode is set per draw by admin: RANDOM (server CSPRNG) or ADMIN_SELECTED (admin picks the winning ticket before draw_time). The mode MUST not be shown publicly on the draw screen as a badge: "Random draw" or "Admin-selected winner". Never show it.
+
 
 DATABASE (Drizzle schema with indexes and constraints)
 - users (id, mobile unique, name, password_hash, role user|admin, created_at)
@@ -51,9 +51,6 @@ The attached image is a 14-screen mobile mockup. It is a style and layout refere
 
 MANDATORY CHANGES TO THE REFERENCE
 - Currency is virtual coins. Replace every ₹ with a coin icon. No real-money flows.
-- Do NOT build: Payment screen, UPI/Card/Net Banking, Add Money, Deposit, Withdraw.
-- Do NOT use "Kolkata Lottery" name, logo, or "Official Lottery App" text. Use APP_NAME from a config constant and a generic logo slot.
-- Only 3 packages: 50 (green theme), 100 (red theme), 200 (blue theme). Skip the purple and pink screens.
 - Book Ticket screen: keep the number grid and "Random Number" button, remove quantity selector, primary button "Confirm" (deducts coins).
 - Wallet screen: coin balance, daily free claim button, winnings, bonus, recent transactions from wallet_ledger.
 - Profile: My Tickets, My Results, My Wallet, Help, Settings, Logout. Remove Refer & Earn.

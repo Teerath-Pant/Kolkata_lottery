@@ -1,5 +1,5 @@
-import { and, eq, sql } from 'drizzle-orm';
-import { randomInt } from 'crypto';
+import { and, eq, lt, sql } from 'drizzle-orm';
+import { createHash, randomInt } from 'crypto';
 import { config } from '../config';
 import { Tx, db } from '../db';
 import { draws, idempotencyKeys, tickets } from '../db/schema';
@@ -8,6 +8,14 @@ import { TICKET_MAX, TICKET_MIN } from './draws';
 import { applyWallet, lockWallet } from './wallet';
 
 export interface BuyInput { ticketNo?: number; random?: boolean }
+
+/** Idempotency keys are only honoured for a day; a key is bound to one draw + one choice. */
+const IDEMPOTENCY_TTL_MS = 24 * 3_600_000;
+const requestHash = (drawId: number, input: BuyInput) =>
+  createHash('sha256').update(`${drawId}:${input.random ? 'random' : input.ticketNo}`).digest('hex');
+
+export const purgeExpiredIdempotencyKeys = (now = new Date()) =>
+  db.delete(idempotencyKeys).where(lt(idempotencyKeys.createdAt, new Date(now.getTime() - IDEMPOTENCY_TTL_MS)));
 
 async function insertTicket(tx: Tx, drawId: number, userId: number, ticketNo: number) {
   const [t] = await tx.insert(tickets).values({ drawId, userId, ticketNo })
@@ -34,10 +42,19 @@ export async function buyTicket(userId: number, drawId: number, input: BuyInput,
     if (!draw) throw notFound('Draw');
     await lockWallet(tx, userId); // serialises every request of the same user (also makes idempotency race-free)
 
+    const reqHash = requestHash(drawId, input);
     if (idemKey) {
       const [prev] = await tx.select().from(idempotencyKeys)
         .where(and(eq(idempotencyKeys.userId, userId), eq(idempotencyKeys.key, idemKey)));
-      if (prev) return prev.response as BuyResult;
+      if (prev && now.getTime() - prev.createdAt.getTime() > IDEMPOTENCY_TTL_MS) {
+        await tx.delete(idempotencyKeys).where(and(eq(idempotencyKeys.userId, userId), eq(idempotencyKeys.key, idemKey)));
+      } else if (prev) {
+        // same key for a different draw / number would silently return an unrelated purchase: refuse instead
+        if (prev.requestHash && prev.requestHash !== reqHash) {
+          throw new AppError(422, 'IDEMPOTENCY_KEY_REUSED', 'This Idempotency-Key was already used for a different request');
+        }
+        return prev.response as BuyResult;
+      }
     }
 
     const cutoff = draw.drawTime.getTime() - config.BUY_CUTOFF_SECONDS * 1000;
@@ -59,7 +76,7 @@ export async function buyTicket(userId: number, drawId: number, input: BuyInput,
 
     const balance = await applyWallet(tx, userId, -draw.ticketPrice, 'ticket_purchase', drawId);
     const result: BuyResult = { ticketId: ticket.id, drawId, ticketNo: ticket.ticketNo, price: draw.ticketPrice, balance };
-    if (idemKey) await tx.insert(idempotencyKeys).values({ key: idemKey, userId, response: result });
+    if (idemKey) await tx.insert(idempotencyKeys).values({ key: idemKey, userId, requestHash: reqHash, response: result });
     return result;
   });
 }
