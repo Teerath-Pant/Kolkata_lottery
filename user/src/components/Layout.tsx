@@ -8,7 +8,6 @@ import {
 import { motion } from "framer-motion";
 import { CountUp, Page } from "./motion";
 import { Logo } from "./Logo";
-
 import { APP_NAME, COIN_NOTE, TAGLINE } from "../config";
 import { useAuth } from "../lib/auth";
 import { headerGradient } from "../theme";
@@ -42,7 +41,16 @@ export function Shell({ tabs = true }: { tabs?: boolean }) {
         replace
       />
     );
- 
+  return (
+    <Frame>
+      <DesktopNav />
+      {tabs && loc.pathname !== "/" && <MobileHeader />}
+      <main className={`${tabs ? "pb-28" : "pb-8"} md:pb-12`}>
+        <Page key={loc.pathname}>{outlet}</Page>
+      </main>
+      {tabs && <TabBar />}
+    </Frame>
+  );
 }
 
 export const Frame = ({ children }: { children: React.ReactNode }) => (

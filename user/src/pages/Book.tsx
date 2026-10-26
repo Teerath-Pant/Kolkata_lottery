@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Item, item as itemV } from '../components/motion';
+import { Item } from '../components/motion';
 import { useToast } from '../components/Toast';
 import { Button, Coins, Countdown, ErrorBox, ModeBadge, PageHeader, Spinner } from '../components/ui';
 import { api } from '../lib/api';
@@ -20,7 +20,7 @@ export function Book() {
   const { balance } = useAuth();
   const [picks, setPicks] = useState<(number | undefined)[]>([]);
   const [qty, setQty] = useState(1);
-  const [active, setActive] = useState(0); 
+  const [active, setActive] = useState(0);
   const [random, setRandom] = useState(false);
 
   const draw = useQuery({
@@ -33,12 +33,15 @@ export function Book() {
     queryFn: () => api<{ maxTickets: number; taken: number[]; offers: number[] }>(`/draws/${id}/tickets`),
     refetchInterval: 4000,
   });
-  const offers = tickets.data?.offers ?? [];
-  
-  const live = Array.from({ length: qty }, (_, i) => (picks[i] !== undefined && offers.includes(picks[i]!) ? picks[i] : undefined));
+  const offers = taken.data?.offers ?? [];
+
+  const live = Array.from({ length: qty }, (_, i) =>
+    picks[i] !== undefined && offers.includes(picks[i]!) ? picks[i] : undefined,
+  );
   const filled = live.filter((n): n is number => n !== undefined);
 
-  const refresh = () => ['me', 'wallet', 'tickets', 'draw', 'taken', 'packages'].forEach((k) => queryClient.invalidateQueries({ queryKey: [k] }));
+  const refresh = () =>
+    ['me', 'wallet', 'tickets', 'draw', 'taken', 'packages'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   const reset = () => { setPicks([]); setQty(1); setActive(0); setRandom(false); };
 
   const buy = useMutation({
@@ -58,13 +61,21 @@ export function Book() {
       return done;
     },
     onSuccess: (done) => {
-      toast(done.length === 1 ? `Ticket #${ticketLabel(done[0])} booked! You can book more.` : `${done.length} tickets booked! You can book more.`, 'success');
+      toast(
+        done.length === 1
+          ? `Ticket #${ticketLabel(done[0])} booked! You can book more.`
+          : `${done.length} tickets booked! You can book more.`,
+        'success',
+      );
       refresh();
-      reset(); 
+      reset();
     },
     onError: (e) => {
       const done = (e as { done?: number[] }).done ?? [];
-      toast(`${e instanceof Error ? e.message : 'Could not book'}${done.length ? ` (${done.length} ticket${done.length > 1 ? 's' : ''} already booked)` : ''}`, 'error');
+      toast(
+        `${e instanceof Error ? e.message : 'Could not book'}${done.length ? ` (${done.length} ticket${done.length > 1 ? 's' : ''} already booked)` : ''}`,
+        'error',
+      );
       refresh();
       setPicks([]);
       setActive(0);
@@ -74,8 +85,8 @@ export function Book() {
   if (draw.isLoading || taken.isLoading) return <><PageHeader title="Book Ticket" /><Spinner /></>;
   if (draw.error || !draw.data) return <><PageHeader title="Book Ticket" /><ErrorBox error={draw.error} retry={() => draw.refetch()} /></>;
   const d = draw.data;
-  const max = tickets.data?.maxTickets ?? d.maxTickets;
-  const sold = tickets.data?.taken.length ?? d.soldCount;
+  const max = taken.data?.maxTickets ?? d.maxTickets;
+  const sold = taken.data?.taken.length ?? d.soldCount;
   const left = Math.max(0, max - sold);
   const closed = d.status !== 'open';
   const total = d.ticketPrice * qty;
@@ -92,15 +103,17 @@ export function Book() {
   const togglePick = (n: number) => {
     setRandom(false);
     const at = live.indexOf(n);
-    if (at === active) { 
+    if (at === active) {
       setPicks(() => { const x = [...live]; x[active] = undefined; return x; });
       return;
     }
-    if (at !== -1) { setActive(at); return; } 
+    if (at !== -1) { setActive(at); return; }
     setPicks(() => { const x = [...live]; x[active] = n; return x; });
     const nextEmpty = Array.from({ length: qty }, (_, i) => i).find((i) => i !== active && live[i] === undefined);
     if (nextEmpty !== undefined) setActive(nextEmpty);
   };
+
+  const myNos = d.myTicketNos ?? [];
 
   return (
     <div>
@@ -118,9 +131,9 @@ export function Book() {
             </div>
           </Item>
 
-          {d.myTicketNos.length > 0 && (
+          {myNos.length > 0 && (
             <Item className="rounded-btn bg-brand-light p-3 text-center text-sm font-semibold text-brand-dark">
-              You hold {d.myTicketNos.length} ticket{d.myTicketNos.length > 1 ? 's' : ''} in this draw: {d.myTicketNos.map((n) => `#${ticketLabel(n)}`).join(', ')}. You can book more.
+              You hold {myNos.length} ticket{myNos.length > 1 ? 's' : ''} in this draw: {myNos.map((n) => `#${ticketLabel(n)}`).join(', ')}. You can book more.
             </Item>
           )}
           {closed && <Item className="rounded-btn bg-red-50 p-3 text-center text-sm font-semibold text-bad">Ticket sales for this draw are closed.</Item>}
@@ -142,7 +155,8 @@ export function Book() {
                   const sel = live.includes(n) && !random;
                   return (
                     <motion.button
-                      key={n} disabled={closed}
+                      key={n}
+                      disabled={closed}
                       onClick={() => togglePick(n)}
                       aria-pressed={sel}
                       whileTap={{ scale: 0.85 }}
@@ -160,33 +174,6 @@ export function Book() {
               </AnimatePresence>
             </div>
           )}
-
-          {!random && (
-            <Item className="mt-4 space-y-2 rounded-card bg-white p-4 shadow-card">
-              <div className="text-sm font-semibold">Select Your Numbers</div>
-              <div className="grid grid-cols-2 gap-2">
-                {Array.from({ length: quantity }, (_, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    disabled={closed}
-                    onClick={() => setActivePick(index)}
-                    className={`rounded-btn border-2 px-3 py-2 text-left ${
-                      activePick === index
-                        ? packageColors ? '' : 'border-bad bg-red-50'
-                        : 'border-brand/30 bg-white'
-                    }`}
-                    style={activePick === index ? selectedStyle : undefined}
-                  >
-                    <div className="text-[10px] text-muted">Ticket {index + 1}</div>
-                    <div className="text-base font-extrabold tabular-nums text-brand-dark">
-                      {picks[index] !== undefined ? ticketLabel(picks[index]!) : 'Select'}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </Item>
-          )}
           <p className="mt-2 text-center text-[11px] text-muted">Sold numbers are swapped for fresh ones automatically.</p>
         </Item>
 
@@ -194,7 +181,7 @@ export function Book() {
           <motion.button
             whileTap={{ scale: 0.96 }}
             disabled={closed}
-            onClick={() => { setRandom(!random); setPicks([]); }}
+            onClick={() => { setRandom(!random); setPicks([]); setActive(0); }}
             aria-pressed={random}
             className={`w-full rounded-btn border-2 py-3 font-semibold ${random ? 'border-bad bg-red-50 text-bad' : 'border-brand/30 bg-white text-brand'} disabled:opacity-50`}
           >
@@ -211,7 +198,7 @@ export function Book() {
                 <button type="button" aria-label="More tickets" disabled={closed || qty >= Math.min(MAX_QTY, left)} onClick={() => changeQty(qty + 1)} className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-brand/30 text-xl font-bold text-brand disabled:opacity-40">+</button>
               </div>
             </div>
-            
+
             <div className="flex justify-between text-sm"><span className="text-muted">Total ({qty} ticket{qty > 1 ? 's' : ''})</span><Coins n={total} /></div>
             <div className="flex justify-between text-sm"><span className="text-muted">Your balance</span><Coins n={balance} /></div>
             <AnimatePresence>
@@ -223,7 +210,7 @@ export function Book() {
             </AnimatePresence>
           </Item>
 
-          {!random && qty > 1 && (
+          {!random && (
             <Item className="space-y-2 rounded-card bg-white p-4 shadow-card">
               <div className="text-sm font-semibold">Your numbers</div>
               <div className="grid grid-cols-2 gap-2">
@@ -250,8 +237,6 @@ export function Book() {
                 {random ? `Random${qty > 1 ? ` x ${qty}` : ''} (assigned by server)` : filled.length ? filled.map((n) => `#${ticketLabel(n)}`).join(', ') : 'Not selected'}
               </b>
             </div>
-            <div className="flex justify-between"><span className="text-muted">Total ({qty} ticket{qty > 1 ? 's' : ''})</span><Coins n={total} /></div>
-            <div className="flex justify-between"><span className="text-muted">Your balance</span><Coins n={balance} /></div>
           </Item>
 
           <Button disabled={!ready || buy.isPending} onClick={() => buy.mutate()}>
