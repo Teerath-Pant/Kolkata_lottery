@@ -3,22 +3,13 @@ import { motion } from 'framer-motion';
 import { Coins, PageHeader } from '../components/ui';
 import { Logo } from '../components/Logo';
 import { useAuth } from '../lib/auth';
-
-const ITEMS = [
-  { to: '/tickets', icon: '🎟️', label: 'My Tickets', bg: 'bg-red-100' },
-  { to: '/tickets?tab=results', icon: '🏆', label: 'My Results', bg: 'bg-yellow-100' },
-  { to: '/wallet', icon: '👛', label: 'My Wallet', bg: 'bg-blue-100' },
-  { to: '/refer', icon: '🎁', label: 'Refer & Earn', bg: 'bg-green-100' },
-  { to: '/verify', icon: '🔍', label: 'Verify a Draw', bg: 'bg-purple-100' },
-  { to: '/help', icon: '❓', label: 'Help & Support', bg: 'bg-pink-100' },
-  { to: '/settings', icon: '⚙️', label: 'Settings', bg: 'bg-gray-100' },
-];
+import { MENU_ITEMS } from '../lib/menu';
 
 export function More() {
   const { user, balance, logout } = useAuth();
   return (
     <div>
-      <PageHeader title="My Profile" back="/" />
+      <PageHeader title="My Profile" back={false} />
       <div className="mx-auto max-w-md space-y-4 p-4 md:px-6">
         {/* Profile card */}
         <div className="flex items-center gap-3 rounded-card bg-white p-4 shadow-card">
@@ -27,15 +18,14 @@ export function More() {
           </div>
           <div className="min-w-0 flex-1">
             <div className="truncate font-bold">{user?.name}</div>
-            <div className="text-xs text-muted">+{user?.mobile}</div>
-            <span className="mt-1 inline-block rounded-pill bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">✔ Verified</span>
+            <div className="text-xs text-muted">{user?.username}</div>
           </div>
           <Coins n={balance} />
         </div>
 
         {/* Menu */}
         <div className="divide-y divide-line overflow-hidden rounded-card bg-white shadow-card">
-          {ITEMS.map((i) => (
+          {MENU_ITEMS.map((i) => (
             <motion.div key={i.to} whileTap={{ backgroundColor: '#f2f5fb' }}>
               <Link to={i.to} className="flex items-center gap-3 px-4 py-3">
                 <span className={`flex h-9 w-9 items-center justify-center rounded-full text-lg ${i.bg}`}>{i.icon}</span>

@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
+import { Activity } from './pages/Activity';
 import { Dashboard } from './pages/Dashboard';
 import { Draws } from './pages/Draws';
 import { Login } from './pages/Login';
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/packages" element={<Packages />} />
         <Route path="/users" element={<Users />} />
         <Route path="/winners" element={<Winners />} />
+        <Route path="/activity" element={<Activity />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

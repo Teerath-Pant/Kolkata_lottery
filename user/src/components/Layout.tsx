@@ -69,16 +69,6 @@ export function Footer({ className = "" }: { className?: string }) {
   );
 }
 
-function MobileHeader() {
-  return (
-    <header className="px-3 py-2 text-white md:hidden" style={headerGradient}>
-      <Link to="/more" aria-label="Menu" className="inline-block p-2 text-2xl leading-none">
-        ☰
-      </Link>
-    </header>
-  );
-}
-
 /** Tablet/desktop navigation (hidden on phones, which use the bottom TabBar). */
 function DesktopNav() {
   const { user, balance } = useAuth();

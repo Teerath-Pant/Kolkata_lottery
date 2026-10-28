@@ -12,7 +12,7 @@ export function Login() {
   const nav = useNavigate();
   const loc = useLocation();
   const toast = useToast();
-  const [mobile, setMobile] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const to = (loc.state as { from?: string } | null)?.from ?? '/';
@@ -21,7 +21,7 @@ export function Login() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
-    try { await login(mobile, password); nav(to, { replace: true }); }
+    try { await login(username, password); nav(to, { replace: true }); }
     catch (err) { toast(err instanceof Error ? err.message : 'Login failed', 'error'); }
     finally { setBusy(false); }
   }
@@ -34,8 +34,8 @@ export function Login() {
           <h1 className="mt-2 text-xl font-extrabold text-brand-dark">{APP_NAME}</h1>
           <p className="text-sm text-muted">Admin Panel login</p>
         </div>
-        <input className={field} inputMode="numeric" maxLength={10} placeholder="Admin mobile number" value={mobile}
-          onChange={(e) => setMobile(e.target.value.replace(/\D/g, ''))} required autoComplete="username" />
+        <input className={field} maxLength={20} placeholder="Admin user ID" value={username}
+          onChange={(e) => setUsername(e.target.value.trim().toLowerCase())} required autoComplete="username" />
         <input className={field} type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
         <Button disabled={busy}>{busy ? 'Please wait…' : 'Login'}</Button>
       </motion.form>

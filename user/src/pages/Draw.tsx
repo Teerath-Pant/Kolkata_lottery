@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Celebration } from "../components/Celebration";
+import { TicketCard } from "../components/TicketCard";
 import { prizeText } from "../components/PackageCard";
 import { useToast } from "../components/Toast";
 import {
@@ -10,11 +11,11 @@ import {
   Coins,
   Countdown,
   ErrorBox,
-  ModeBadge,
   PageHeader,
   Spinner,
 } from "../components/ui";
 import { api } from "../lib/api";
+import { useAuth } from "../lib/auth";
 import { fmtDateTime, ticketLabel } from "../lib/time";
 import type { Draw } from "../lib/types";
 import { DRAW_PACKAGE_COLORS, themeGradient } from "../theme";
@@ -78,6 +79,7 @@ export function DrawPage() {
   const nav = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
+  const { user: me } = useAuth();
   const [panel, setPanel] = useState<"prize" | "how" | null>(null);
   const [party, setParty] = useState(false);
   const prev = useRef<string | null>(null);
@@ -107,11 +109,24 @@ export function DrawPage() {
       qc.invalidateQueries({ queryKey: ["wallet"] });
       qc.invalidateQueries({ queryKey: ["tickets"] });
       if (d.iWon) setParty(true);
+      else if (d.myTier)
+        toast(`🎉 ${d.myTier.matchDigits}-digit match! You won ${d.myTier.prize.toLocaleString("en-IN")} coins`, "success");
       else if (d.status === "completed")
         toast(`Winning ticket: #${ticketLabel(d.winningTicketNo!)}`, "info");
       else toast("Draw cancelled. Any tickets were refunded.", "info");
     }
   }, [d, qc, toast]);
+
+  // a cancelled draw has nothing to show: move on to the package's next open draw
+  const cancelledPkg = d?.status === "cancelled" ? d.packageId : undefined;
+  useEffect(() => {
+    if (cancelledPkg === undefined) return;
+    let stale = false;
+    api<Draw>(`/packages/${cancelledPkg}/current-draw`)
+      .then((next) => { if (!stale && String(next.id) !== id) nav(`/draw/${next.id}`, { replace: true }); })
+      .catch(() => {}); // no open draw (package inactive): stay, "Go to next draw" is still there
+    return () => { stale = true; };
+  }, [cancelledPkg, id, nav]);
 
   if (q.isLoading)
     return (
@@ -228,9 +243,6 @@ export function DrawPage() {
                 </>
               )}
             </div>
-            <div className="mt-2">
-              <ModeBadge mode={d.mode} />
-            </div>
             <div className="mt-3 text-xs text-white/80">
               Draw Date &amp; Time
             </div>
@@ -278,9 +290,6 @@ export function DrawPage() {
                 </>
               )}
             </div>
-            <div className="mt-2">
-              <ModeBadge mode={d.mode} />
-            </div>
             <div className="mt-3 text-xs text-white/80">
               Draw Date &amp; Time
             </div>
@@ -315,13 +324,16 @@ export function DrawPage() {
                 🎉 That is your ticket! Prize credited.
               </div>
             )}
-            <Link
-              to={`/verify/${d.id}`}
-              className="mt-2 inline-block text-sm font-semibold text-brand underline"
-            >
-              Verify this result
-            </Link>
           </div>
+        )}
+        {d.status === "completed" && d.winningTicketNo !== null && (
+          <TicketCard
+            ticketNo={d.winningTicketNo}
+            drawTime={d.drawTime}
+            userName={d.iWon ? me?.name ?? d.winnerName ?? undefined : d.winnerName ?? undefined}
+            ticketPrice={d.ticketPrice}
+            qrValue={`${location.origin}/verify/${d.id}?t=${ticketLabel(d.winningTicketNo)}`}
+          />
         )}
         {d.status === "cancelled" && (
           <div
@@ -386,7 +398,6 @@ export function DrawPage() {
           <div className="space-y-1 rounded-card bg-white p-4 text-sm" style={whiteCard}>
             <p><b>Prize:</b> {d.prizeType === 'fixed' ? <Coins n={d.prizeValue} /> : `${d.prizeValue}% of the ticket pool (now `}{d.prizeType !== 'fixed' && <><Coins n={d.prizeAmount} />)</>}</p>
             <p><b>Tickets:</b> max {d.maxTickets}. The draw runs even if only one ticket is sold; with no tickets it is skipped.</p>
-            <p><b>Winner selection:</b> {d.mode === 'random' ? 'Random (HMAC of a pre-committed server seed).' : 'Chosen by the admin before draw time.'}</p>
             <div className="pt-2 text-[11px] text-muted">
               <div className="font-semibold">
                 Provably fair commitment (SHA-256 of server seed)

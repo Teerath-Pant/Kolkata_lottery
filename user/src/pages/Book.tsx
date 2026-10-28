@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Item } from '../components/motion';
+import { Item, item as itemV } from '../components/motion';
+import { TicketCard } from '../components/TicketCard';
 import { useToast } from '../components/Toast';
-import { Button, Coins, Countdown, ErrorBox, ModeBadge, PageHeader, Spinner } from '../components/ui';
+import { Button, Coins, Countdown, ErrorBox, PageHeader, Spinner } from '../components/ui';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { fmtDateTime, ticketLabel } from '../lib/time';
@@ -17,34 +18,30 @@ export function Book() {
   const { id } = useParams();
   const qc = useQueryClient();
   const toast = useToast();
-  const { balance } = useAuth();
+  const { balance, user: me } = useAuth();
   const [picks, setPicks] = useState<(number | undefined)[]>([]);
+  const [booked, setBooked] = useState<number[]>([]);
   const [qty, setQty] = useState(1);
-  const [active, setActive] = useState(0);
+  const [active, setActive] = useState(0); // which "Your numbers" box the next tapped number fills
   const [random, setRandom] = useState(false);
 
-  const draw = useQuery({
-    queryKey: ['draw', id],
-    queryFn: () => api<Draw>(`/draws/${id}`),
-    refetchInterval: 5000,
-  });
+  const draw = useQuery({ queryKey: ['draw', id], queryFn: () => api<Draw>(`/draws/${id}`), refetchInterval: 5000 });
   const taken = useQuery({
     queryKey: ['taken', id],
     queryFn: () => api<{ maxTickets: number; taken: number[]; offers: number[] }>(`/draws/${id}/tickets`),
     refetchInterval: 4000,
   });
   const offers = taken.data?.offers ?? [];
-
-  const live = Array.from({ length: qty }, (_, i) =>
-    picks[i] !== undefined && offers.includes(picks[i]!) ? picks[i] : undefined,
-  );
+  // a picked number someone else just bought drops out of the offers -> that box goes back to empty
+  const live = Array.from({ length: qty }, (_, i) => (picks[i] !== undefined && offers.includes(picks[i]!) ? picks[i] : undefined));
   const filled = live.filter((n): n is number => n !== undefined);
 
-  const refresh = () =>
-    ['me', 'wallet', 'tickets', 'draw', 'taken', 'packages'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+  const refresh = () => ['me', 'wallet', 'tickets', 'draw', 'taken', 'packages'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   const reset = () => { setPicks([]); setQty(1); setActive(0); setRandom(false); };
 
+  // One buy request per ticket, each with its own Idempotency-Key. On a failure the tickets already bought stay bought.
   const buy = useMutation({
+    onMutate: () => setBooked([]),
     mutationFn: async () => {
       const done: number[] = [];
       try {
@@ -61,21 +58,15 @@ export function Book() {
       return done;
     },
     onSuccess: (done) => {
-      toast(
-        done.length === 1
-          ? `Ticket #${ticketLabel(done[0])} booked! You can book more.`
-          : `${done.length} tickets booked! You can book more.`,
-        'success',
-      );
+      setBooked(done);
+      toast(done.length === 1 ? `Ticket #${ticketLabel(done[0])} booked! You can book more.` : `${done.length} tickets booked! You can book more.`, 'success');
       refresh();
-      reset();
+      reset(); // stay on this page for the next purchase
     },
     onError: (e) => {
       const done = (e as { done?: number[] }).done ?? [];
-      toast(
-        `${e instanceof Error ? e.message : 'Could not book'}${done.length ? ` (${done.length} ticket${done.length > 1 ? 's' : ''} already booked)` : ''}`,
-        'error',
-      );
+      setBooked(done);
+      toast(`${e instanceof Error ? e.message : 'Could not book'}${done.length ? ` (${done.length} ticket${done.length > 1 ? 's' : ''} already booked)` : ''}`, 'error');
       refresh();
       setPicks([]);
       setActive(0);
@@ -103,11 +94,11 @@ export function Book() {
   const togglePick = (n: number) => {
     setRandom(false);
     const at = live.indexOf(n);
-    if (at === active) {
+    if (at === active) { // tapped the number of the active box again: empty it
       setPicks(() => { const x = [...live]; x[active] = undefined; return x; });
       return;
     }
-    if (at !== -1) { setActive(at); return; }
+    if (at !== -1) { setActive(at); return; } // number already sits in another box: jump to that box
     setPicks(() => { const x = [...live]; x[active] = n; return x; });
     const nextEmpty = Array.from({ length: qty }, (_, i) => i).find((i) => i !== active && live[i] === undefined);
     if (nextEmpty !== undefined) setActive(nextEmpty);
@@ -118,12 +109,11 @@ export function Book() {
   return (
     <div>
       <PageHeader title="Book Ticket" style={themeGradient(d.theme)} />
-      <div className="space-y-4 p-4 md:mx-auto md:grid md:max-w-5xl md:grid-cols-[1fr_340px] md:grid-rows-[auto_1fr] md:gap-x-6 md:gap-y-4 md:space-y-0 md:px-6 md:pb-12 md:[grid-template-areas:'grid_info'_'grid_actions']">
-        <div className="space-y-4 md:[grid-area:info]">
+      <div className="space-y-4 p-4 md:mx-auto md:grid md:max-w-5xl md:grid-cols-[minmax(0,1fr)_340px] md:grid-rows-[auto_1fr] md:gap-x-6 md:gap-y-4 md:space-y-0 md:px-6 md:pb-6 md:[grid-template-areas:'grid_info'_'grid_actions']">
+        <div className="min-w-0 space-y-4 md:[grid-area:info]">
           <Item className="rounded-card p-3 text-white shadow-card md:p-4" style={themeGradient(d.theme)}>
             <div className="flex items-center justify-between">
               <div className="text-lg font-bold">{d.packageName} Draw</div>
-              <ModeBadge mode={d.mode} />
             </div>
             <div className="flex justify-between text-xs text-white/85">
               <span>{fmtDateTime(d.drawTime)}</span>
@@ -139,7 +129,7 @@ export function Book() {
           {closed && <Item className="rounded-btn bg-red-50 p-3 text-center text-sm font-semibold text-bad">Ticket sales for this draw are closed.</Item>}
         </div>
 
-        <Item className="md:rounded-card md:bg-white md:p-5 md:shadow-card md:[grid-area:grid]">
+        <Item className="min-w-0 md:rounded-card md:bg-white md:p-5 md:shadow-card md:[grid-area:grid]">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="font-semibold">
               Select Number{qty > 1 ? 's' : ''} <span className="text-xs font-normal text-muted">({filled.length}/{qty})</span>
@@ -155,8 +145,7 @@ export function Book() {
                   const sel = live.includes(n) && !random;
                   return (
                     <motion.button
-                      key={n}
-                      disabled={closed}
+                      key={n} disabled={closed}
                       onClick={() => togglePick(n)}
                       aria-pressed={sel}
                       whileTap={{ scale: 0.85 }}
@@ -177,9 +166,9 @@ export function Book() {
           <p className="mt-2 text-center text-[11px] text-muted">Sold numbers are swapped for fresh ones automatically.</p>
         </Item>
 
-        <div className="space-y-4 md:sticky md:top-24 md:[grid-area:actions]">
+        <div className="min-w-0 space-y-4 md:sticky md:top-24 md:self-start md:[grid-area:actions]">
           <motion.button
-            whileTap={{ scale: 0.96 }}
+            variants={itemV} whileTap={{ scale: 0.96 }}
             disabled={closed}
             onClick={() => { setRandom(!random); setPicks([]); setActive(0); }}
             aria-pressed={random}
@@ -189,28 +178,16 @@ export function Book() {
             Random Number {random && '✓'}
           </motion.button>
 
-          <Item className="flex flex-col gap-3 rounded-card bg-white p-4 shadow-card">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold">Quantity</span>
-              <div className="flex items-center gap-4">
-                <button type="button" aria-label="Fewer tickets" disabled={closed || qty <= 1} onClick={() => changeQty(qty - 1)} className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-brand/30 text-xl font-bold text-brand disabled:opacity-40">−</button>
-                <span className="w-6 text-center text-lg font-extrabold tabular-nums">{qty}</span>
-                <button type="button" aria-label="More tickets" disabled={closed || qty >= Math.min(MAX_QTY, left)} onClick={() => changeQty(qty + 1)} className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-brand/30 text-xl font-bold text-brand disabled:opacity-40">+</button>
-              </div>
+          <Item className="flex items-center justify-between rounded-card bg-white p-4 shadow-card">
+            <span className="text-sm font-semibold">Quantity</span>
+            <div className="flex items-center gap-4">
+              <button type="button" aria-label="Fewer tickets" disabled={closed || qty <= 1} onClick={() => changeQty(qty - 1)} className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-brand/30 text-xl font-bold text-brand disabled:opacity-40">−</button>
+              <span className="w-6 text-center text-lg font-extrabold tabular-nums">{qty}</span>
+              <button type="button" aria-label="More tickets" disabled={closed || qty >= Math.min(MAX_QTY, left)} onClick={() => changeQty(qty + 1)} className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-brand/30 text-xl font-bold text-brand disabled:opacity-40">+</button>
             </div>
-
-            <div className="flex justify-between text-sm"><span className="text-muted">Total ({qty} ticket{qty > 1 ? 's' : ''})</span><Coins n={total} /></div>
-            <div className="flex justify-between text-sm"><span className="text-muted">Your balance</span><Coins n={balance} /></div>
-            <AnimatePresence>
-              {(poor || qty > left) && (
-                <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden pt-1 text-xs font-semibold text-bad">
-                  {poor ? 'Not enough coins. Claim your free daily coins in the Wallet.' : `Only ${left} ticket${left === 1 ? '' : 's'} left.`}
-                </motion.p>
-              )}
-            </AnimatePresence>
           </Item>
 
-          {!random && (
+          {!random && qty > 1 && (
             <Item className="space-y-2 rounded-card bg-white p-4 shadow-card">
               <div className="text-sm font-semibold">Your numbers</div>
               <div className="grid grid-cols-2 gap-2">
@@ -237,14 +214,42 @@ export function Book() {
                 {random ? `Random${qty > 1 ? ` x ${qty}` : ''} (assigned by server)` : filled.length ? filled.map((n) => `#${ticketLabel(n)}`).join(', ') : 'Not selected'}
               </b>
             </div>
+            <div className="flex justify-between"><span className="text-muted">Total ({qty} ticket{qty > 1 ? 's' : ''})</span><Coins n={total} /></div>
+            <div className="flex justify-between"><span className="text-muted">Your balance</span><Coins n={balance} /></div>
+            <AnimatePresence>
+              {(poor || qty > left) && (
+                <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden pt-1 text-xs font-semibold text-bad">
+                  {poor ? 'Not enough coins.' : `Only ${left} ticket${left === 1 ? '' : 's'} left.`}
+                </motion.p>
+              )}
+            </AnimatePresence>
           </Item>
 
           <Button disabled={!ready || buy.isPending} onClick={() => buy.mutate()}>
             {buy.isPending ? 'Booking…' : <>Confirm · <Coins n={total} className="text-white" /></>}
           </Button>
-          <p className="text-center text-[11px] text-muted">Confirming deducts coins from your wallet. Play coins only, no real value.</p>
+          <p className="text-center text-[11px] text-muted">Confirming deducts amount from your wallet.</p>
         </div>
       </div>
+      {booked.length > 0 && (
+        <div className="px-4 pb-4 md:mx-auto md:max-w-5xl md:px-6 md:pb-12">
+          <section className="rounded-card bg-green-50 p-3 md:p-4" aria-label="Booking confirmation">
+            <h2 className="mb-3 font-bold text-green-900">Booking confirmed</h2>
+            <div className="mx-auto grid max-w-xl gap-3 md:max-w-none md:grid-cols-2">
+              {booked.map((ticketNo) => (
+                <TicketCard
+                  key={ticketNo}
+                  ticketNo={ticketNo}
+                  drawTime={d.drawTime}
+                  userName={me?.name}
+                  ticketPrice={d.ticketPrice}
+                  qrValue={`${location.origin}/verify/${d.id}?t=${ticketLabel(ticketNo)}`}
+                />
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

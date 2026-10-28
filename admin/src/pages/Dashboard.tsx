@@ -2,8 +2,9 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Card, Coins, Load, ModeBadge } from '../components/ui';
 import { api } from '../lib/api';
+import { ACTION_LABEL, describe, target, who } from '../lib/audit';
 import { fmtDateTime } from '../lib/time';
-import type { AdminDraw, AdminPkg, AuditRow, ManagedUser } from '../lib/types';
+import type { AdminDraw, AdminPkg, AuditPage, ManagedUser } from '../lib/types';
 
 const Stat = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <Card><div className="text-xs text-muted">{label}</div><div className="text-xl font-extrabold text-brand-dark sm:text-2xl">{children}</div></Card>
@@ -13,7 +14,7 @@ export function Dashboard() {
   const draws = useQuery({ queryKey: ['admin-draws', 'open'], queryFn: () => api<{ draws: AdminDraw[] }>('/admin/draws?status=open'), refetchInterval: 8000 });
   const users = useQuery({ queryKey: ['admin-users'], queryFn: () => api<{ users: ManagedUser[] }>('/admin/users') });
   const pkgs = useQuery({ queryKey: ['admin-packages'], queryFn: () => api<{ packages: AdminPkg[] }>('/admin/packages') });
-  const audit = useQuery({ queryKey: ['admin-audit'], queryFn: () => api<{ log: AuditRow[] }>('/admin/audit-log') });
+  const audit = useQuery({ queryKey: ['admin-audit'], queryFn: () => api<AuditPage>('/admin/audit-log?pageSize=6') });
 
   return (
     <div className="space-y-4">
@@ -39,11 +40,15 @@ export function Dashboard() {
           )}</Load>
         </Card>
         <Card>
-          <div className="mb-2 flex items-center justify-between"><h2 className="font-semibold">Recent admin activity</h2></div>
+          <div className="mb-2 flex items-center justify-between"><h2 className="font-semibold">Recent admin activity</h2><Link to="/activity" className="text-sm font-semibold text-brand">View all</Link></div>
           <Load q={audit}>{(d) => d.log.length === 0 ? <p className="text-sm text-muted">Nothing yet.</p> : (
             <div className="divide-y divide-line">
-              {d.log.slice(0, 6).map((a) => (
-                <div key={a.id} className="flex justify-between py-2 text-sm"><b>{a.action}</b><span className="text-xs text-muted">{fmtDateTime(a.createdAt)}</span></div>
+              {d.log.map((a) => (
+                <div key={a.id} className="py-2 text-sm">
+                  <div className="flex justify-between gap-2"><b>{ACTION_LABEL[a.action] ?? a.action}</b><span className="shrink-0 text-xs text-muted">{fmtDateTime(a.createdAt)}</span></div>
+                  <div className="truncate text-xs text-muted">{[target(a), who(a)].filter(Boolean).join(' · ')}</div>
+                  <div className="truncate text-xs">{describe(a)[0]}</div>
+                </div>
               ))}
             </div>
           )}</Load>
