@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CountUp } from '../components/motion';
 import { useToast } from '../components/Toast';
-import { Card, Coin, Coins, Empty, ErrorBox, PageHeader, Spinner } from '../components/ui';
+import { Card, Coins, Empty, ErrorBox, PageHeader, Spinner } from '../components/ui';
 import { COIN_NOTE } from '../config';
 import { api } from '../lib/api';
 import { fmtDateTime } from '../lib/time';
@@ -41,7 +41,7 @@ export function Wallet() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-xs text-muted">Coin balance</div>
-                <div className="flex items-center gap-1.5 text-3xl font-extrabold text-brand-dark min-[380px]:text-4xl"><Coin size={32} /><CountUp value={w.balance} /></div>
+                <div className="flex items-center gap-1.5 text-3xl font-extrabold text-brand-dark min-[380px]:text-4xl"><span>Rs</span><CountUp value={w.balance} /></div>
               </div>
               <motion.button
                 type="button"
@@ -52,7 +52,7 @@ export function Wallet() {
                 + Add Money
               </motion.button>
             </div>
-            <p className="mt-1 text-[11px] text-muted">🪙 {COIN_NOTE}</p>
+            <p className="mt-1 text-[11px] text-muted">{COIN_NOTE}</p>
           </Card>
 
           <div className="grid grid-cols-3 gap-3">

@@ -1,5 +1,5 @@
 import { FormEvent, InputHTMLAttributes, ReactNode, useState } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Item, Page, item } from '../components/motion';
 import { Button } from '../components/ui';
@@ -12,6 +12,7 @@ import { headerGradient } from '../theme';
 const icon = { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
 const LockIcon = () => <svg {...icon}><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /><circle cx="12" cy="15.5" r="1.3" /></svg>;
 const UserIcon = () => <svg {...icon}><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg>;
+const GiftIcon = () => <svg {...icon}><rect x="3" y="8" width="18" height="13" rx="2" /><path d="M12 8v13M3 13h18M12 8c-2-4-6-3-5 0 .5 1.3 3 1 5 0zm0 0c2-4 6-3 5 0-.5 1.3-3 1-5 0z" /></svg>;
 const PhoneIcon = () => <svg {...icon}><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" /></svg>;
 const EyeIcon = ({ off }: { off: boolean }) => (
   <svg {...icon}>
@@ -40,7 +41,11 @@ export function AuthPage() {
   const nav = useNavigate();
   const loc = useLocation();
   const toast = useToast();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [sp] = useSearchParams();
+  const refParam = sp.get('ref')?.trim() ?? '';
+  // a shared referral link (/login?ref=CODE) opens straight on the sign-up form with the code filled in
+  const [mode, setMode] = useState<'login' | 'register'>(refParam ? 'register' : 'login');
+  const [referralCode, setReferralCode] = useState(refParam.toUpperCase());
   const [username, setUsername] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -57,7 +62,7 @@ export function AuthPage() {
     setBusy(true);
     try {
       if (isLogin) await login(username, password);
-      else await register({ username, name, phone, password });
+      else await register({ username, name, phone, password, referralCode });
       nav(to, { replace: true });
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed', 'error');
@@ -114,6 +119,15 @@ export function AuthPage() {
                 <Field icon={<PhoneIcon />} type="tel" inputMode="numeric" maxLength={10} pattern="[6-9][0-9]{9}" title="10-digit mobile number"
                   placeholder="Mobile number" aria-label="Mobile number" value={phone}
                   onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))} required autoComplete="tel-national" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <AnimatePresence initial={false}>
+            {!isLogin && (
+              <motion.div key="ref" {...reveal} className="overflow-hidden">
+                <Field icon={<GiftIcon />} placeholder="Referral code" aria-label="Referral code" value={referralCode}
+                  onChange={(e) => setReferralCode(e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase())}
+                  required maxLength={32} autoComplete="off" autoCapitalize="characters" />
               </motion.div>
             )}
           </AnimatePresence>

@@ -7,19 +7,8 @@ import { headerGradient } from '../theme';
 import type { DrawMode } from '../lib/types';
 import { fmtCountdown, fmtNum, useCountdown } from '../lib/time';
 
-export function Coin({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-label="coins" className="inline-block shrink-0 align-[-0.15em]">
-      <circle cx="12" cy="12" r="11" fill="#c98a0b" />
-      <circle cx="12" cy="12" r="9" fill="#f7c948" />
-      <circle cx="12" cy="12" r="6.5" fill="none" stroke="#c98a0b" strokeWidth="1.4" />
-      <path d="M12 8v8M9.7 10.2c0-1 1-1.6 2.3-1.6s2.3.6 2.3 1.6-1 1.4-2.3 1.7-2.3.7-2.3 1.7 1 1.6 2.3 1.6 2.3-.6 2.3-1.6" fill="none" stroke="#8a5a05" strokeWidth="1.1" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-export function Coins({ n, size = 16, className = '' }: { n: number; size?: number; className?: string }) {
-  return <span className={`inline-flex items-center gap-1 font-semibold ${className}`}><Coin size={size} />{fmtNum(n)}</span>;
+export function Coins({ n, className = '' }: { n: number; className?: string }) {
+  return <span className={`font-semibold ${className}`}>Rs {fmtNum(n)}</span>;
 }
 
 export function ModeBadge({ mode, className = '' }: { mode: DrawMode; className?: string }) {

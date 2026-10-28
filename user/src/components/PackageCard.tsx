@@ -18,10 +18,10 @@ export function PackageTile({ pkg }: { pkg: Pkg }) {
       className="relative block overflow-hidden rounded-card p-3 text-white shadow-card md:p-5" style={themeGradient(pkg.theme)}>
       <motion.div animate={{ rotate: [0, -8, 8, 0] }} transition={{ repeat: Infinity, duration: 3.5, repeatDelay: 2 }} className="w-fit text-2xl" aria-hidden>🏆</motion.div>
       <div className="text-[11px] font-medium text-white/80">{pkg.name}</div>
-      <div className="text-lg font-extrabold leading-tight min-[380px]:text-xl md:text-2xl"><Coins n={d?.prizeAmount ?? 0} size={18} className="font-extrabold" /></div>
+      <div className="text-lg font-extrabold leading-tight min-[380px]:text-xl md:text-2xl"><Coins n={d?.prizeAmount ?? 0} className="font-extrabold" /></div>
       <div className="text-[10px] uppercase tracking-wide text-gold">{prizeText(pkg) ?? 'Grand prize'}</div>
       <div className="mt-2 flex items-center justify-between text-xs">
-        <span className="rounded-pill bg-black/25 px-2 py-0.5"><Coins n={pkg.price} size={12} className="text-[11px]" /> / ticket</span>
+        <span className="rounded-pill bg-black/25 px-2 py-0.5"><Coins n={pkg.price} className="text-[11px]" /> / ticket</span>
       </div>
       <div className="mt-1.5 text-[11px] text-white/90">⏱ {d ? <Countdown target={d.drawTime} serverTime={d.serverTime} /> : '—'}</div>
       {d && <ModeBadge mode={d.mode} className="mt-1.5 !text-[9px]" />}
@@ -53,7 +53,7 @@ export function PackageRow({ pkg, index = 0 }: { pkg: Pkg; index?: number }) {
         <div className="text-3xl font-extrabold leading-tight">{pkg.name}</div>
         <div className="text-xs text-white/90">{known ? ROW_LABELS[index] : (prizeText(pkg) ?? 'Prize')}</div>
         <div className="text-xs text-white/85">
-          Ticket <Coins n={pkg.price} size={12} /> · {d ? <>Draw in <Countdown target={d.drawTime} serverTime={d.serverTime} /></> : 'No open draw'}
+          Ticket <Coins n={pkg.price} /> · {d ? <>Draw in <Countdown target={d.drawTime} serverTime={d.serverTime} /></> : 'No open draw'}
         </div>
       </Link>
       {d && (

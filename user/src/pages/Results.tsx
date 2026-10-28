@@ -82,7 +82,7 @@ export function Results() {
                             <div className="text-lg font-extrabold tabular-nums" style={{ color }}>
                               {ticketLabel(result.winningTicketNo)}
                             </div>
-                            <div className="text-[10px] text-muted"><Coins n={result.prizeAmount ?? 0} size={10} /></div>
+                            <div className="text-[10px] text-muted"><Coins n={result.prizeAmount ?? 0} /></div>
                           </>
                         ) : <span className="text-xs font-semibold text-muted">Cancelled</span>}
                       </div>
@@ -228,7 +228,7 @@ function ResultDetail({
                     }`}
                   >
                     <div className="flex min-h-9 flex-1 items-center justify-center px-0.5 text-[11px] font-extrabold leading-tight text-white sm:text-xs" style={themeGradient(p.theme)}>
-                      <Coins n={rd.prizeAmount} size={11} className="font-extrabold" />
+                      <Coins n={rd.prizeAmount} className="font-extrabold" />
                     </div>
                     <div className="flex flex-1 flex-col items-center justify-center gap-0.5 bg-white/80 px-0.5 text-[9px] font-extrabold leading-tight sm:text-[10px]">
                       <span className="max-w-full truncate">{p.name}</span>
@@ -258,7 +258,7 @@ function ResultDetail({
                     {t.winners !== null ? ` · ${t.winners} winner${t.winners === 1 ? '' : 's'}` : ''})
                   </div>
                 </div>
-                <div className="text-right font-extrabold"><Coins n={t.prize} size={11} /></div>
+                <div className="text-right font-extrabold"><Coins n={t.prize} /></div>
                 <div className="min-w-10 text-right font-extrabold tabular-nums">
                   {r.winningTicketNo !== null ? ticketLabel(r.winningTicketNo).slice(0, t.matchDigits) : '•'.repeat(t.matchDigits)}
                 </div>
@@ -284,6 +284,7 @@ function DrawTicket({ d }: { d: Draw }) {
       drawTime={d.drawTime}
       userName={d.iWon ? me?.name ?? d.winnerName ?? undefined : d.winnerName ?? undefined}
       ticketPrice={d.ticketPrice}
+      prize={d.prizeAmount}
       qrValue={`${location.origin}/verify/${d.id}?t=${ticketLabel(ticketNo)}`}
     />
   );

@@ -53,6 +53,7 @@ export function Tickets() {
                         drawTime={ticket.drawTime}
                         userName={me?.name}
                         ticketPrice={ticket.price}
+                        prize={ticket.livePrize}
                         qrValue={`${location.origin}/verify/${ticket.drawId}?t=${ticketLabel(ticket.ticketNo)}`}
                       />
                     ))}

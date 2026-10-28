@@ -31,3 +31,9 @@ export interface AuditRow {
   targetUserName: string | null; targetUsername: string | null;
 }
 export interface AuditPage { log: AuditRow[]; total: number; page: number; pageSize: number; pages: number }
+
+export interface ComplaintRow {
+  id: number; userId: number; subject: string; message: string; status: 'open' | 'resolved'; createdAt: string; resolvedAt: string | null;
+  name: string; username: string;
+}
+export interface ComplaintPage { complaints: ComplaintRow[]; total: number; open: number; page: number; pageSize: number; pages: number }

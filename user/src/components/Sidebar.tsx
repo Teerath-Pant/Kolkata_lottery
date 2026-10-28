@@ -49,7 +49,7 @@ export function Sidebar() {
                   <div className="text-xs text-white/80">{user?.username}</div>
                 </div>
               </div>
-              <div className="mt-3 inline-flex rounded-pill bg-white/15 px-3 py-1 text-sm"><Coins n={balance} size={16} /></div>
+              <div className="mt-3 inline-flex rounded-pill bg-white/15 px-3 py-1 text-sm"><Coins n={balance} /></div>
             </div>
 
             <nav className="flex-1 overflow-y-auto py-2">

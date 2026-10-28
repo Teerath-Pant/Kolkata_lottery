@@ -10,6 +10,7 @@
     "build": "npm run build -w user && npm run build -w admin && npm run build -w server",
     "migrate": "npm run migrate -w server",
     "generate": "npm run generate -w server",
+    "studio": "npm run studio -w server",
     "seed": "npm run seed -w server",
     "test": "npm test -w server"
   },

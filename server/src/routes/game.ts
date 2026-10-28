@@ -6,7 +6,8 @@ import { drawTierWinners, draws, packages, tickets, users } from '../db/schema';
 import { notFound } from '../lib/errors';
 import { optionalAuth, requireAuth } from '../middleware';
 import { buyTicket } from '../services/buy';
-import { publicDraw, publicPackages, takenNumbers, verifyData } from '../services/draws';
+import { createComplaint, listMyComplaints } from '../services/complaints';
+import { computePrize, publicDraw, publicPackages, takenNumbers, verifyData } from '../services/draws';
 import { walletSummary } from '../services/wallet';
 
 export const gameRouter = Router();
@@ -59,13 +60,24 @@ gameRouter.get('/me/tickets', requireAuth, async (req, res) => {
     drawTime: draws.drawTime, winningTicketNo: draws.winningTicketNo, prizeAmount: draws.prizeAmount,
     won: sql<boolean>`${draws.winnerUserId} = ${tickets.userId}`,
     matchDigits: drawTierWinners.matchDigits, tierPrize: drawTierWinners.prize,
+    prizeType: draws.prizeType, prizeValue: draws.prizeValue,
+    sold: sql<number>`(SELECT count(*)::int FROM ${tickets} WHERE ${tickets.drawId} = ${draws.id})`,
   }).from(tickets).innerJoin(draws, eq(draws.id, tickets.drawId)).innerJoin(packages, eq(packages.id, draws.packageId))
     .leftJoin(drawTierWinners, and(eq(drawTierWinners.drawId, tickets.drawId), eq(drawTierWinners.ticketNo, tickets.ticketNo)))
     .where(eq(tickets.userId, req.user!.id)).orderBy(desc(tickets.createdAt)).limit(200);
-  res.json({ tickets: rows });
+  // livePrize = the winning prize shown on the ticket: the paid amount once drawn, else what the pool would pay right now
+  res.json({ tickets: rows.map(({ prizeType, prizeValue, sold, ...t }) => ({ ...t, livePrize: t.prizeAmount ?? computePrize({ prizeType, prizeValue, ticketPrice: t.price }, sold) })) });
 });
 
 gameRouter.get('/me/wallet', requireAuth, async (req, res) => res.json(await walletSummary(req.user!.id)));
+
+gameRouter.post('/me/complaints', requireAuth, async (req, res) => {
+  const body = z.object({ subject: z.string().trim().min(3).max(100), message: z.string().trim().min(10).max(1000) }).parse(req.body);
+  const c = await createComplaint(req.user!.id, body);
+  res.status(201).json({ complaint: { id: c.id, subject: c.subject, message: c.message, status: c.status, createdAt: c.createdAt, resolvedAt: c.resolvedAt } });
+});
+
+gameRouter.get('/me/complaints', requireAuth, async (req, res) => res.json({ complaints: await listMyComplaints(req.user!.id) }));
 
 gameRouter.get('/results', async (req, res) => {
   const q = z.object({
@@ -85,5 +97,5 @@ gameRouter.get('/results', async (req, res) => {
       start ? gte(draws.drawTime, start) : undefined,
       start ? lt(draws.drawTime, new Date(start.getTime() + 86_400_000)) : undefined,
     )).orderBy(desc(draws.drawTime)).limit(q.limit);
-  res.json({ results: rows.map((r) => ({ ...r, winnerName: r.winnerName ? `${r.winnerName.slice(0, 1)}***` : null })) });
+  res.json({ results: rows });
 });

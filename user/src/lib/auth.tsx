@@ -8,7 +8,7 @@ interface AuthCtx {
   balance: number;
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
-  register: (b: { username: string; name: string; phone: string; password: string }) => Promise<void>;
+  register: (b: { username: string; name: string; phone: string; password: string; referralCode: string }) => Promise<void>;
   logout: () => void;
 }
 

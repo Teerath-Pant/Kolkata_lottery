@@ -1,6 +1,5 @@
 import type { CSSProperties } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Coins } from './ui';
 import { fmtNum, ticketLabel } from '../lib/time';
 
 type Props = {
@@ -8,6 +7,8 @@ type Props = {
   drawTime?: string | Date;
   userName?: string;
   ticketPrice?: number;
+  /** live winning prize, drawn in the empty prize area of the ticket image */
+  prize?: number;
   qrValue?: string;
   drawNo?: number | string;
   className?: string;
@@ -49,13 +50,15 @@ const STAR = Array.from({ length: 48 }, (_, i) => {
   return `${(Math.cos(angle) * radius).toFixed(1)},${(Math.sin(angle) * radius).toFixed(1)}`;
 }).join(' ');
 
-// Shrinks the font so "coin + amount" never exceeds maxW (cqw), however many digits the price has.
-function CoinPrice({ price, size, maxW }: { price: number; size: number; maxW: number }) {
+// Shrinks the font so "Rs + amount" never exceeds maxW (cqw), however many digits the price has.
+// lead: "Rs" in front of the amount (default) or nothing.
+const LEAD_EM = { Rs: 1.56, none: 0 }; // "Rs " in Arial bold
+function CoinPrice({ price, size, maxW, lead = 'Rs' }: { price: number; size: number; maxW: number; lead?: keyof typeof LEAD_EM }) {
   const textEm = [...fmtNum(price)].reduce((w, c) => w + (/\d/.test(c) ? 0.556 : 0.278), 0);
-  const fontSize = Math.min(size, maxW / (0.81 + textEm)); // 0.66em coin + 0.15em gap, Arial bold widths
+  const fontSize = Math.min(size, maxW / (LEAD_EM[lead] + textEm));
   return (
     <span style={{ fontSize: `${fontSize}cqw`, lineHeight: 1, whiteSpace: 'nowrap' }}>
-      <Coins n={price} size={1} className="!gap-[0.15em] [&>svg]:!h-[0.66em] [&>svg]:!w-[0.66em]" />
+      {lead === 'Rs' && 'Rs '}{fmtNum(price)}
     </span>
   );
 }
@@ -72,13 +75,13 @@ function PriceBadge({ x, y, w, h, price }: { x: number; y: number; w: number; h:
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       }}
     >
-      <CoinPrice price={price} size={3.3} maxW={w - 1.2} />
+      <CoinPrice price={price} size={3.3} maxW={w - 1.2} lead="Rs" />
       <div style={{ fontSize: '1.8cqw', marginTop: '0.5cqw', letterSpacing: '0.05em', lineHeight: 1 }}>ONLY</div>
     </div>
   );
 }
 
-export function TicketCard({ ticketNo, drawTime, userName, ticketPrice, qrValue, drawNo, className }: Props) {
+export function TicketCard({ ticketNo, drawTime, userName, ticketPrice, prize, qrValue, drawNo, className }: Props) {
   const dateValue = drawTime === undefined ? null : drawTime instanceof Date ? drawTime : new Date(drawTime);
   const validDate = dateValue && Number.isFinite(dateValue.getTime()) ? dateValue : null;
   const date = validDate
@@ -94,6 +97,7 @@ export function TicketCard({ ticketNo, drawTime, userName, ticketPrice, qrValue,
   const name = userName?.trim().toUpperCase() ?? '';
   const nameSize = name ? Math.min(3.05, 45 / name.length) : 0;
   const validDrawNo = drawNo === undefined || drawNo === null || String(drawNo).trim() === '' ? undefined : Number(drawNo);
+  const validPrize = prize !== undefined && Number.isFinite(prize) ? prize : undefined;
   const validPrice = ticketPrice !== undefined && Number.isFinite(ticketPrice) ? ticketPrice : undefined;
   const qr = qrValue?.trim() || undefined;
 
@@ -101,8 +105,8 @@ export function TicketCard({ ticketNo, drawTime, userName, ticketPrice, qrValue,
     <div
       className={className}
       style={{
-        position: 'relative', width: '100%', aspectRatio: '1360 / 788', containerType: 'inline-size',
-        backgroundImage: 'url(/ticket2.png)', backgroundSize: '100% 100%', borderRadius: '1.2cqw', overflow: 'hidden',
+        position: 'relative', width: '100%', aspectRatio: '1647 / 955', containerType: 'inline-size',
+        backgroundImage: 'url(/ticket2-v2.png)', backgroundSize: '100% 100%', borderRadius: '1.2cqw', overflow: 'hidden',
       }}
     >
       {time && ampm && (
@@ -111,6 +115,16 @@ export function TicketCard({ ticketNo, drawTime, userName, ticketPrice, qrValue,
         </div>
       )}
       {no && <div style={{ ...pos(77.6, 13.3), ...numFont, fontSize: '6.2cqw' }}>{no}</div>}
+
+      {validPrize !== undefined && (
+        <div style={{
+          ...pos(33, 58.9), width: '50cqw', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5cqw',
+          color: '#d3160c', fontFamily: pinkFont.fontFamily, fontWeight: 800, lineHeight: 1,
+        }}>
+          <div style={{ fontSize: '1.8cqw', letterSpacing: '0.12em', color: '#9b1c5c' }}>WINNING PRIZE</div>
+          <CoinPrice price={validPrize} size={6.5} maxW={46} lead="none" />
+        </div>
+      )}
 
       {name && (
         <div style={{
@@ -133,7 +147,7 @@ export function TicketCard({ ticketNo, drawTime, userName, ticketPrice, qrValue,
         <PriceBadge x={44.4} y={12.4} w={7.7} h={9.1} price={validPrice} />
         <PriceBadge x={8.2} y={85.3} w={6.9} h={9.0} price={validPrice} />
         <div style={{ ...pos(9.6, 61), display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#8f2144', fontFamily: pinkFont.fontFamily, fontWeight: 800, lineHeight: 1 }}>
-          <CoinPrice price={validPrice} size={3.6} maxW={8} />
+          <CoinPrice price={validPrice} size={3.6} maxW={8} lead="Rs" />
           <div style={{ fontSize: '2.1cqw', marginTop: '0.5cqw', letterSpacing: '0.05em' }}>ONLY</div>
         </div>
         <div style={{ ...pos(81.8, 62.4), width: '13.4cqw', height: '13.4cqw' }}>
@@ -147,7 +161,7 @@ export function TicketCard({ ticketNo, drawTime, userName, ticketPrice, qrValue,
             color: '#fff', fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 800, lineHeight: 1,
           }}>
             <div style={{ fontSize: '2cqw' }}>ONLY</div>
-            <CoinPrice price={validPrice} size={4.1} maxW={9} />
+            <CoinPrice price={validPrice} size={4.1} maxW={9} lead="Rs" />
           </div>
         </div>
       </>}

@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { eq, sql } from 'drizzle-orm';
 import { config } from '../config';
 import { db } from '../db';
-import { loginThrottle, users, wallets } from '../db/schema';
+import { loginThrottle, referralTree, users, wallets } from '../db/schema';
 import { AppError } from '../lib/errors';
 import { applyWallet } from './wallet';
 
@@ -11,32 +11,64 @@ export const hashPassword = (pw: string) => bcrypt.hash(pw, config.BCRYPT_ROUNDS
 // same cost as real hashes so login timing does not reveal whether a user id exists
 const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', config.BCRYPT_ROUNDS);
 
+export const normalizeReferralCode = (code: string) => code.trim().toUpperCase();
+
 export async function createUser(
-  input: { username: string; name: string; password: string; phone?: string; role?: 'user' | 'admin' },
+  input: { username: string; name: string; password: string; phone?: string; role?: 'user' | 'admin'; referralCode?: string },
   bonus = config.SIGNUP_BONUS,
 ) {
   const passwordHash = await hashPassword(input.password);
-  try {
-    return await db.transaction(async (tx) => {
-      const [u] = await tx.insert(users).values({
-        username: input.username, name: input.name, phone: input.phone ?? null, passwordHash, role: input.role ?? 'user',
-      }).returning();
-      await tx.insert(wallets).values({ userId: u.id, balance: 0 });
-      if (bonus > 0) await applyWallet(tx, u.id, bonus, 'signup_bonus');
-      return u;
-    });
-  } catch (e: any) {
-    const err = e?.cause ?? e;
-    if (err?.code === '23505') {
-      if (String(err.constraint ?? '').includes('phone')) throw new AppError(409, 'PHONE_EXISTS', 'This mobile number is already registered. Please log in.');
-      throw new AppError(409, 'USERNAME_EXISTS', 'User ID already taken');
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await insertUser(input, passwordHash, bonus);
+    } catch (e: any) {
+      const err = e?.cause ?? e;
+      // the generated referral code collided with an existing one (1 in ~4 billion): just try again
+      if (err?.code === '23505' && String(err.constraint ?? '').includes('referral_code') && attempt < 3) continue;
+      throw mapUserConflict(e);
     }
-    throw e;
   }
 }
 
-/** Signup with a mobile number (one account per number, no OTP). */
-export async function registerUser(input: { username: string; name: string; password: string; phone: string }) {
+async function insertUser(
+  input: { username: string; name: string; phone?: string; role?: 'user' | 'admin'; referralCode?: string },
+  passwordHash: string,
+  bonus: number,
+) {
+  return db.transaction(async (tx) => {
+    let referrerId: number | null = null;
+    if (input.referralCode !== undefined) {
+      const [r] = await tx.select({ id: users.id }).from(users).where(eq(users.referralCode, normalizeReferralCode(input.referralCode)));
+      if (!r) throw new AppError(400, 'INVALID_REFERRAL', 'This referral code is not valid. Please check the link you were sent.');
+      referrerId = r.id;
+    }
+    const [u] = await tx.insert(users).values({
+      username: input.username, name: input.name, phone: input.phone ?? null, passwordHash, role: input.role ?? 'user', referredBy: referrerId,
+    }).returning();
+    if (referrerId !== null) {
+      // the new user sits under the referrer and under every ancestor of the referrer, one level deeper
+      const upline = await tx.select().from(referralTree).where(eq(referralTree.descendantId, referrerId));
+      await tx.insert(referralTree).values([
+        { ancestorId: referrerId, descendantId: u.id, depth: 1 },
+        ...upline.map((r) => ({ ancestorId: r.ancestorId, descendantId: u.id, depth: r.depth + 1 })),
+      ]);
+    }
+    await tx.insert(wallets).values({ userId: u.id, balance: 0 });
+    if (bonus > 0) await applyWallet(tx, u.id, bonus, 'signup_bonus');
+    return u;
+  });
+}
+
+/** Unique-constraint violations on signup become friendly 409s; anything else passes through. */
+function mapUserConflict(e: any) {
+  const err = e?.cause ?? e;
+  if (err?.code !== '23505') return e;
+  if (String(err.constraint ?? '').includes('phone')) return new AppError(409, 'PHONE_EXISTS', 'This mobile number is already registered. Please log in.');
+  return new AppError(409, 'USERNAME_EXISTS', 'User ID already taken');
+}
+
+/** Signup with a mobile number (one account per number, no OTP), always under the referrer whose code was given. */
+export async function registerUser(input: { username: string; name: string; password: string; phone: string; referralCode: string }) {
   return createUser(input, config.SIGNUP_BONUS);
 }
 
@@ -73,4 +105,6 @@ export async function checkLogin(username: string, password: string, now = new D
   return u;
 }
 
-export const publicUser = (u: typeof users.$inferSelect) => ({ id: u.id, username: u.username, name: u.name, role: u.role, verified: false });
+export const publicUser = (u: typeof users.$inferSelect) => ({
+  id: u.id, username: u.username, name: u.name, role: u.role, verified: false, referralCode: u.referralCode,
+});

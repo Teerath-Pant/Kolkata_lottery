@@ -9,6 +9,8 @@ export const ACTION_LABEL: Record<string, string> = {
   set_mode: 'Draw mode changed',
   select_winner: 'Winner selected',
   adjust_coins: 'Coins adjusted',
+  complaint_resolve: 'Complaint resolved',
+  complaint_reopen: 'Complaint reopened',
   draw_fallback_random: 'Random fallback (system)',
 };
 
@@ -55,6 +57,9 @@ export function describe(a: AuditRow): string[] {
       return [`Winning ticket: ${p.previous ? `#${ticketLabel(p.previous)}` : '–'} → #${ticketLabel(p.ticketNo)}`];
     case 'adjust_coins':
       return [`Amount: ${p.amount > 0 ? '+' : ''}${fmtNum(p.amount)} coins`, `New balance: ${fmtNum(p.balance)}`, ...(p.reason ? [`Reason: ${p.reason}`] : [])];
+    case 'complaint_resolve':
+    case 'complaint_reopen':
+      return [`Complaint #${p.complaintId}: ${p.subject}`];
     case 'draw_fallback_random':
       return [`Selected ticket ${p.selectedTicketNo ? `#${ticketLabel(p.selectedTicketNo)}` : '–'}: ${p.reason ?? ''}`];
     default:

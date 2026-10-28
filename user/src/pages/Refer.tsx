@@ -7,10 +7,9 @@ export function Refer() {
   const { user } = useAuth();
   const toast = useToast();
 
-  // Abhi UI-only: asli referral code backend se aayega. Tab tak mobile se banaya hua code dikhega.
-  const mobile = user?.username ?? '';
-  const code = `LTD${mobile.slice(-6) || '000000'}`;
-  const msg = `Join ${APP_NAME} and get bonus coins! Use my referral code: ${code}\n${window.location.origin}`;
+  const code = user?.referralCode ?? '';
+  const link = `${window.location.origin}/login?ref=${code}`;
+  const msg = `Join ${APP_NAME}! Sign up with my referral code ${code}\n${link}`;
 
   const copy = async () => {
     try {
@@ -37,7 +36,7 @@ export function Refer() {
           <div aria-hidden className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-yellow-300/50 blur-2xl" />
           <div className="relative mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-amber-300 to-orange-500 text-4xl shadow-lg">🎁</div>
           <h2 className="relative mt-3 text-xl font-extrabold text-amber-950">Invite Friends, Earn Rewards</h2>
-          <p className="relative mx-auto mt-1 max-w-xs text-sm leading-relaxed text-amber-950/75">Share your referral code. When a friend signs up, you both receive bonus coins.</p>
+          <p className="relative mx-auto mt-1 max-w-xs text-sm leading-relaxed text-amber-950/75">Share your referral code or link. Your friends need it to sign up.</p>
         </Card>
 
         <Card className="border border-blue-100 bg-gradient-to-br from-white to-blue-50 text-center shadow-[0_10px_28px_rgba(30,86,200,0.14)]">
@@ -53,8 +52,8 @@ export function Refer() {
           <div className="mb-3 font-bold text-brand-dark">How It Works</div>
           <ol className="list-decimal space-y-2 pl-5 text-sm text-muted marker:font-bold marker:text-brand">
             <li>Share your referral code with a friend.</li>
-            <li>Your friend enters the code when signing up.</li>
-            <li>You both receive bonus coins.</li>
+            <li>Your friend opens your link or enters the code when signing up.</li>
+            <li>They join through you.</li>
           </ol>
         </Card>
       </div>

@@ -243,6 +243,7 @@ export function Book() {
                   drawTime={d.drawTime}
                   userName={me?.name}
                   ticketPrice={d.ticketPrice}
+                  prize={d.prizeAmount}
                   qrValue={`${location.origin}/verify/${d.id}?t=${ticketLabel(ticketNo)}`}
                 />
               ))}

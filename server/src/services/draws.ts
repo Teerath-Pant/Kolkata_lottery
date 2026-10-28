@@ -67,8 +67,6 @@ export function nextDrawFor(pkg: Pick<Pkg, 'drawIntervalMinutes' | 'dailyTime'>,
 export const computePrize = (d: Pick<Draw, 'prizeType' | 'prizeValue' | 'ticketPrice'>, sold: number) =>
   d.prizeType === 'fixed' ? d.prizeValue : Math.floor((sold * d.ticketPrice * d.prizeValue) / 100);
 
-const maskName = (n: string) => `${n.slice(0, 1)}***`;
-
 /** Everything about a draw that is the same for every viewer (safe to cache briefly). */
 async function baseDraws(ids: number[]) {
   const out = new Map<number, { view: ReturnType<typeof baseView>; winnerUserId: number | null }>();
@@ -93,7 +91,7 @@ async function baseDraws(ids: number[]) {
       winners: d.status === 'completed' ? (tierWinners.find((w) => w.drawId === d.id && w.k === t.matchDigits)?.n ?? 0) : null,
     }));
     const winnerName = d.winnerUserId ? names.get(d.winnerUserId) : undefined;
-    out.set(d.id, { winnerUserId: d.winnerUserId, view: baseView(d, p, soldCount, tiers, winnerName ? maskName(winnerName) : null) });
+    out.set(d.id, { winnerUserId: d.winnerUserId, view: baseView(d, p, soldCount, tiers, winnerName ?? null) });
   }
   return out;
 }

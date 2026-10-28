@@ -25,7 +25,10 @@ function sendAuth(req: Request, res: Response, status: number, u: typeof users.$
 }
 
 authRouter.post('/auth/register', async (req, res) => {
-  const b = z.object({ username, name: z.string().trim().min(2).max(40), phone, password: z.string() })
+  const b = z.object({
+    username, name: z.string().trim().min(2).max(40), phone, password: z.string(),
+    referralCode: z.string({ required_error: 'Referral code is required' }).trim().min(1, 'Referral code is required').max(32),
+  })
     .superRefine((v, ctx) => {
       const problem = passwordProblem(v.password, { username: v.username, phone: v.phone });
       if (problem) ctx.addIssue({ code: 'custom', path: ['password'], message: problem });

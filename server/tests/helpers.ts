@@ -2,7 +2,7 @@ import { db, pool } from '../src/db';
 import { runMigrations } from '../src/db/migrate';
 import { draws, packages, tickets, users, wallets } from '../src/db/schema';
 import { openDraw } from '../src/services/draws';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 
 export async function resetDb() {
   await runMigrations();
@@ -54,13 +54,23 @@ export const GOOD_PASSWORD = 'Sup3r-Secret9';
 export const phoneFor = (username: string) =>
   /^[6-9]\d{9}$/.test(username) ? username : '9' + String([...username].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 1_000_000_000, 7)).padStart(9, '0');
 
+/** Signup needs a referral code: use the oldest account's (the seeded admin), creating a root user if the DB is empty. */
+export async function rootReferralCode() {
+  const [first] = await db.select({ code: users.referralCode }).from(users).orderBy(asc(users.id)).limit(1);
+  return first?.code ?? (await makeUser(0)).referralCode;
+}
+
 /** Registers through the API. Returns the raw register response. */
-export async function signup(base: string, username: string, o: { headers?: Record<string, string>; password?: string; name?: string; phone?: string } = {}) {
+export async function signup(
+  base: string, username: string,
+  o: { headers?: Record<string, string>; password?: string; name?: string; phone?: string; referralCode?: string } = {},
+) {
   const phone = o.phone ?? phoneFor(username);
   const json = { 'Content-Type': 'application/json', ...o.headers };
+  const referralCode = o.referralCode ?? await rootReferralCode();
   const res = await fetch(base + '/auth/register', {
     method: 'POST', headers: json,
-    body: JSON.stringify({ username, name: o.name ?? 'Asha', phone, password: o.password ?? GOOD_PASSWORD }),
+    body: JSON.stringify({ username, name: o.name ?? 'Asha', phone, password: o.password ?? GOOD_PASSWORD, referralCode }),
   });
   return { status: res.status, headers: res.headers, body: await res.json().catch(() => null) as any };
 }

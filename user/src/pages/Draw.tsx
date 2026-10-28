@@ -235,10 +235,10 @@ export function DrawPage() {
             <div className="mt-4 text-sm text-white/90">
               Prize:{" "}
               {d.prizeType === "fixed" ? (
-                <Coins n={d.prizeValue} size={14} />
+                <Coins n={d.prizeValue} />
               ) : (
                 <>
-                  {d.prizeValue}% of pool (<Coins n={d.prizeAmount} size={14} />
+                  {d.prizeValue}% of pool (<Coins n={d.prizeAmount} />
                   )
                 </>
               )}
@@ -282,10 +282,10 @@ export function DrawPage() {
             <div className="mt-2 text-sm text-white/90">
               Prize:{" "}
               {d.prizeType === "fixed" ? (
-                <Coins n={d.prizeValue} size={14} />
+                <Coins n={d.prizeValue} />
               ) : (
                 <>
-                  {d.prizeValue}% of pool (<Coins n={d.prizeAmount} size={14} />
+                  {d.prizeValue}% of pool (<Coins n={d.prizeAmount} />
                   )
                 </>
               )}
@@ -332,6 +332,7 @@ export function DrawPage() {
             drawTime={d.drawTime}
             userName={d.iWon ? me?.name ?? d.winnerName ?? undefined : d.winnerName ?? undefined}
             ticketPrice={d.ticketPrice}
+            prize={d.prizeAmount}
             qrValue={`${location.origin}/verify/${d.id}?t=${ticketLabel(d.winningTicketNo)}`}
           />
         )}
@@ -356,7 +357,7 @@ export function DrawPage() {
             className="mb-3 text-center text-3xl font-extrabold"
             style={{ color: col ? col[1] : undefined }}
           >
-            <Coins n={d.ticketPrice} size={26} />
+            <Coins n={d.ticketPrice} />
           </div>
           {open && d.myTicketNos.length > 0 && (
             <div className="mb-3 rounded-btn bg-brand-light py-3 text-center text-sm font-bold text-brand-dark">

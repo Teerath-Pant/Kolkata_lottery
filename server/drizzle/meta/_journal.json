@@ -78,6 +78,20 @@
       "when": 1792840696591,
       "tag": "0010_more_themes",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792845036637,
+      "tag": "0011_referrals",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793167815000,
+      "tag": "0012_complaints",
+      "breakpoints": true
     }
   ]
 }

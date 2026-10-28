@@ -5,7 +5,8 @@ import { createApp } from '../src/app';
 import { seed } from '../src/db/seed';
 import { runDueDraws } from '../src/services/drawJob';
 import { db } from '../src/db';
-import { draws, users } from '../src/db/schema';
+import { draws, referralTree, users } from '../src/db/schema';
+import { eq } from 'drizzle-orm';
 import { GOOD_PASSWORD, closePool, resetDb, signup } from './helpers';
 
 let server: Server;
@@ -27,6 +28,26 @@ const cookieJar = (h: Headers) => h.getSetCookie().map((c) => c.split(';')[0]).j
 const register = async (username = '9876543210') => (await signup(base, username)).body;
 
 describe('http api', () => {
+  it('referral: code required and checked, tree stored with every ancestor', async () => {
+    const reg = (u: string, referralCode?: string) => call('/auth/register', { body: { username: u, name: 'Ref', phone: u, password: GOOD_PASSWORD, ...(referralCode === undefined ? {} : { referralCode }) } });
+    expect((await reg('9100000001')).status).toBe(400); // no code
+    expect((await reg('9100000001', 'NOPE1234')).body.error.code).toBe('INVALID_REFERRAL');
+
+    const [admin] = await db.select().from(users).where(eq(users.role, 'admin'));
+    const a = (await reg('9100000001', admin.referralCode.toLowerCase())).body.user; // case-insensitive
+    expect(a.referralCode).toMatch(/^[0-9A-F]{8}$/);
+    const b = (await reg('9100000002', a.referralCode)).body.user;
+    const c = (await reg('9100000003', ` ${b.referralCode} `)).body.user;
+    expect((await call('/me', { token: (await call('/auth/login', { body: { username: '9100000003', password: GOOD_PASSWORD } })).body.accessToken })).body.user.referralCode).toBe(c.referralCode);
+
+    const byId = new Map((await db.select().from(users)).map((u) => [u.id, u.referredBy]));
+    expect([byId.get(a.id), byId.get(b.id), byId.get(c.id)]).toEqual([admin.id, a.id, b.id]);
+    const tree = (await db.select().from(referralTree)).map((t) => [t.ancestorId, t.descendantId, t.depth]);
+    expect(tree.sort()).toEqual([
+      [admin.id, a.id, 1], [admin.id, b.id, 2], [admin.id, c.id, 3], [a.id, b.id, 1], [a.id, c.id, 2], [b.id, c.id, 1],
+    ].sort());
+  });
+
   it('auth: register, duplicate, login, refresh, /me', async () => {
     const r = await register();
     expect(r.accessToken).toBeTruthy();
@@ -126,6 +147,7 @@ describe('http api', () => {
     expect(t2.filter((n: number, i: number) => n !== t1.offers[i])).toEqual([t2[3]]); // only the sold slot got a new number
     const mine = (await call('/me/tickets', { token: a.accessToken })).body.tickets;
     expect(mine).toHaveLength(1);
+    expect(mine[0].livePrize).toBe((await call(`/draws/${draw.id}`)).body.prizeAmount); // ticket shows the live winning prize
     const w = (await call('/me/wallet', { token: a.accessToken })).body;
     expect(w.balance).toBe(450);
     expect(w.recent.map((r: any) => r.type)).toEqual(['ticket_purchase', 'signup_bonus']);
@@ -171,6 +193,49 @@ describe('http api', () => {
     expect((await patch({ drawIntervalMinutes: 15, dailyTime: null })).status).toBe(200);
   });
 
+  it('complaints: player sends + sees own, admin lists + resolves (audited), validation, daily cap, role guard', async () => {
+    const a = await register('9000000011');
+    const b = await register('9000000012');
+    const send = (token: string | undefined, body: object) => call('/me/complaints', { token, body });
+    const good = { subject: 'Prize missing', message: 'My winning prize was not credited to my wallet.' };
+    expect((await send(undefined, good)).status).toBe(401);
+    expect((await send(a.accessToken, { ...good, subject: 'x' })).status).toBe(400);
+    expect((await send(a.accessToken, { ...good, message: 'short' })).status).toBe(400);
+    expect((await send(a.accessToken, { ...good, message: 'x'.repeat(1001) })).status).toBe(400);
+    const made = await send(a.accessToken, good);
+    expect(made.status).toBe(201);
+    expect(made.body.complaint).toMatchObject({ subject: 'Prize missing', status: 'open' });
+    await send(b.accessToken, { subject: 'Other', message: 'Something else is wrong here.' });
+
+    const mine = (await call('/me/complaints', { token: a.accessToken })).body.complaints;
+    expect(mine.map((c: any) => c.subject)).toEqual(['Prize missing']); // only own
+
+    expect((await call('/admin/complaints', { token: a.accessToken })).status).toBe(403);
+    const admin = (await call('/auth/login', { body: { username: '9999999999', password: 'Admin@12345' } })).body;
+    const list = (await call('/admin/complaints', { token: admin.accessToken })).body;
+    expect([list.total, list.open]).toEqual([2, 2]);
+    expect(list.complaints[0]).toMatchObject({ subject: 'Other', username: '9000000012' }); // newest first
+    const id = list.complaints[1].id;
+
+    const patch = (status: string) => call(`/admin/complaints/${id}`, { token: admin.accessToken, method: 'PATCH', body: { status } });
+    expect((await patch('bogus')).status).toBe(400);
+    expect((await call('/admin/complaints/999999', { token: admin.accessToken, method: 'PATCH', body: { status: 'resolved' } })).status).toBe(404);
+    const res = await patch('resolved');
+    expect(res.body.complaint.status).toBe('resolved');
+    expect(res.body.complaint.resolvedAt).toBeTruthy();
+    await patch('resolved'); // no-op, no second audit row
+    expect((await call('/admin/complaints?status=open', { token: admin.accessToken })).body.total).toBe(1);
+    expect((await call('/me/complaints', { token: a.accessToken })).body.complaints[0].status).toBe('resolved');
+    expect((await patch('open')).body.complaint.resolvedAt).toBeNull();
+    const log = (await call('/admin/audit-log', { token: admin.accessToken })).body.log;
+    expect(log.map((l: any) => l.action)).toEqual(['complaint_reopen', 'complaint_resolve']);
+    expect(log[0].targetUsername).toBe('9000000011');
+
+    for (let i = 0; i < 4; i++) expect((await send(a.accessToken, good)).status).toBe(201); // 1 sent so far + 4 = the daily cap of 5
+    const over = await send(a.accessToken, good);
+    expect([over.status, over.body.error.code]).toEqual([429, 'TOO_MANY_COMPLAINTS']);
+  });
+
   it('results list only completed draws, never cancelled ones', async () => {
     const draw = (await call('/packages')).body.packages[0].currentDraw;
     await db.update(draws).set({ drawTime: new Date(Date.now() - 1000) }).where((await import('drizzle-orm')).eq(draws.id, draw.id));
@@ -186,7 +251,7 @@ describe('http api', () => {
     await runDueDraws();
     const res = (await call('/results?packageId=1')).body.results;
     expect(res).toHaveLength(1);
-    expect(res[0].winnerName).toBe('A***');
+    expect(res[0].winnerName).toBe('Asha'); // full name, as shown on the winning ticket
     const v = (await call(`/draws/${draw.id}/verify`)).body;
     expect(v.serverSeed).toBeTruthy();
     expect((await call(`/draws/${draw.id}`, { token: u.accessToken })).body.iWon).toBe(true);

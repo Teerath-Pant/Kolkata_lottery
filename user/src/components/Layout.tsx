@@ -11,7 +11,7 @@ import { Logo } from "./Logo";
 import { APP_NAME, COIN_NOTE, TAGLINE } from "../config";
 import { useAuth } from "../lib/auth";
 import { headerGradient } from "../theme";
-import { Coin, Spinner } from "./ui";
+import { Spinner } from "./ui";
 
 const TABS = [
   { to: "/", label: "Home", icon: "🏠", end: true },
@@ -69,6 +69,16 @@ export function Footer({ className = "" }: { className?: string }) {
   );
 }
 
+function MobileHeader() {
+  return (
+    <header className="px-3 py-2 text-white md:hidden" style={headerGradient}>
+      <Link to="/more" aria-label="Menu" className="inline-block p-2 text-2xl leading-none">
+        ☰
+      </Link>
+    </header>
+  );
+}
+
 /** Tablet/desktop navigation (hidden on phones, which use the bottom TabBar). */
 function DesktopNav() {
   const { user, balance } = useAuth();
@@ -120,7 +130,7 @@ function DesktopNav() {
             to="/wallet"
             className="flex shrink-0 items-center gap-2 rounded-pill bg-white/15 px-4 py-2 text-sm font-semibold transition-colors hover:bg-white/25"
           >
-            <Coin size={18} />
+            <span>Rs</span>
             <CountUp value={balance} />
           </Link>
           <NavLink to="/more" title="Profile & menu" className="shrink-0">

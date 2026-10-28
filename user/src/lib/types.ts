@@ -3,7 +3,7 @@ import type { PackageTheme } from '../theme';
 export type DrawMode = 'random' | 'admin_selected';
 export type DrawStatus = 'open' | 'drawing' | 'completed' | 'cancelled';
 
-export interface User { id: number; username: string; name: string; role: 'user' | 'admin'; verified: boolean }
+export interface User { id: number; username: string; name: string; role: 'user' | 'admin'; verified: boolean; referralCode: string }
 
 export interface Draw {
   id: number; packageId: number; packageName: string; theme: PackageTheme;
@@ -36,6 +36,8 @@ export interface MyTicket {
   price: number; status: DrawStatus; mode: DrawMode; drawTime: string;
   winningTicketNo: number | null; prizeAmount: number | null; won: boolean | null;
   matchDigits: number | null; tierPrize: number | null;
+  /** winning prize of the draw: paid amount once drawn, else what the pool pays right now */
+  livePrize: number;
 }
 
 export interface ResultRow {
@@ -48,3 +50,5 @@ export interface VerifyData {
   drawId: number; status: DrawStatus; mode: DrawMode; winMethod: string | null;
   serverSeedHash: string; serverSeed: string; soldTickets: number[]; winningTicketNo: number | null; formula: string;
 }
+
+export interface MyComplaint { id: number; subject: string; message: string; status: 'open' | 'resolved'; createdAt: string; resolvedAt: string | null }

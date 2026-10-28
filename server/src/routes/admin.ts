@@ -7,6 +7,7 @@ import {
   adjustCoins, createPackage, deletePackage, listAudit, listDraws, listPackagesWithTiers, listUsers, listWinners, selectWinner, setMode,
   setTierPrizes, updatePackage,
 } from '../services/admin';
+import { listComplaints, setComplaintStatus } from '../services/complaints';
 
 export const adminRouter = Router();
 adminRouter.use('/admin', requireAdmin);
@@ -88,4 +89,18 @@ adminRouter.get('/admin/audit-log', async (req, res) => {
     pageSize: z.coerce.number().int().min(1).max(100).default(25),
   }).parse(req.query);
   res.json(await listAudit(q));
+});
+
+adminRouter.get('/admin/complaints', async (req, res) => {
+  const q = z.object({
+    status: z.enum(['open', 'resolved']).optional(),
+    page: z.coerce.number().int().min(1).max(100_000).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  }).parse(req.query);
+  res.json(await listComplaints(q));
+});
+
+adminRouter.patch('/admin/complaints/:id', async (req, res) => {
+  const { status } = z.object({ status: z.enum(['open', 'resolved']) }).parse(req.body);
+  res.json({ complaint: await setComplaintStatus(req.user!.id, id.parse(req.params.id), status, req.ip) });
 });
