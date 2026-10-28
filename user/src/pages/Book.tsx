@@ -104,6 +104,8 @@ export function Book() {
     if (nextEmpty !== undefined) setActive(nextEmpty);
   };
 
+  const myNos = d.myTicketNos ?? [];
+
   return (
     <div>
       <PageHeader title="Book Ticket" style={themeGradient(d.theme)} />
@@ -119,9 +121,9 @@ export function Book() {
             </div>
           </Item>
 
-          {d.myTicketNos.length > 0 && (
+          {myNos.length > 0 && (
             <Item className="rounded-btn bg-brand-light p-3 text-center text-sm font-semibold text-brand-dark">
-              You hold {d.myTicketNos.length} ticket{d.myTicketNos.length > 1 ? 's' : ''} in this draw: {d.myTicketNos.map((n) => `#${ticketLabel(n)}`).join(', ')}. You can book more.
+              You hold {myNos.length} ticket{myNos.length > 1 ? 's' : ''} in this draw: {myNos.map((n) => `#${ticketLabel(n)}`).join(', ')}. You can book more.
             </Item>
           )}
           {closed && <Item className="rounded-btn bg-red-50 p-3 text-center text-sm font-semibold text-bad">Ticket sales for this draw are closed.</Item>}
@@ -168,7 +170,7 @@ export function Book() {
           <motion.button
             variants={itemV} whileTap={{ scale: 0.96 }}
             disabled={closed}
-            onClick={() => { setRandom(!random); setPicks([]); }}
+            onClick={() => { setRandom(!random); setPicks([]); setActive(0); }}
             aria-pressed={random}
             className={`w-full rounded-btn border-2 py-3 font-semibold ${random ? 'border-bad bg-red-50 text-bad' : 'border-brand/30 bg-white text-brand'} disabled:opacity-50`}
           >
@@ -226,7 +228,7 @@ export function Book() {
           <Button disabled={!ready || buy.isPending} onClick={() => buy.mutate()}>
             {buy.isPending ? 'Booking…' : <>Confirm · <Coins n={total} className="text-white" /></>}
           </Button>
-          <p className="text-center text-[11px] text-muted">Confirming deducts ammount from your wallet.</p>
+          <p className="text-center text-[11px] text-muted">Confirming deducts amount from your wallet.</p>
         </div>
       </div>
       {booked.length > 0 && (
