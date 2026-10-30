@@ -16,7 +16,10 @@ export function createApp() {
   app.set('trust proxy', config.TRUST_PROXY);
   app.use(helmet());
   app.use(cors({ origin: corsOrigins, credentials: true }));
-  app.use(express.json({ limit: '50kb' }));
+  // everything is small JSON, except a complaint, which may carry up to 3 compressed screenshots (each checked to 700 KB in the service)
+  const json = express.json({ limit: '50kb' });
+  const jsonWithImage = express.json({ limit: '3mb' });
+  app.use((req, res, next) => (req.method === 'POST' && req.path === '/api/v1/me/complaints' ? jsonWithImage : json)(req, res, next));
 
   const test = config.NODE_ENV === 'test';
   const api = express.Router();

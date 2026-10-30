@@ -15,7 +15,7 @@ let n = 0;
 export async function makeUser(balance = 1000) {
   const i = ++n;
   const [u] = await db.insert(users).values({ username: `9${String(i).padStart(9, '0')}`, name: `User${i}`, passwordHash: 'x' }).returning();
-  await db.insert(wallets).values({ userId: u.id, balance });
+  await db.insert(wallets).values({ userId: u.id, balance, purchaseBalance: balance });
   return u;
 }
 
@@ -24,14 +24,13 @@ export const balanceOf = async (userId: number) =>
 
 export async function makeDraw(opts: {
   price?: number; prizeType?: 'fixed' | 'pool_percent'; prizeValue?: number;
-  max?: number; drawTime?: Date; mode?: 'random' | 'admin_selected';
+  max?: number; drawTime?: Date;
 } = {}) {
   const [pkg] = await db.insert(packages).values({
     name: 'Test', price: opts.price ?? 50, prizeType: opts.prizeType ?? 'fixed', prizeValue: opts.prizeValue ?? 1000,
     maxTickets: opts.max ?? 100, drawIntervalMinutes: 30, theme: 'green',
   }).returning();
   const draw = await openDraw(db, pkg, opts.drawTime ?? new Date(Date.now() + 3600_000));
-  if (opts.mode) await db.update(draws).set({ mode: opts.mode }).where(eq(draws.id, draw.id));
   return { pkg, draw };
 }
 

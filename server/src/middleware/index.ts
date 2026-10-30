@@ -5,7 +5,7 @@ import { db } from '../db';
 import { users } from '../db/schema';
 import { verifyToken } from '../lib/auth';
 import { assertSameClient, cookieToken } from '../lib/cookies';
-import { AppError } from '../lib/errors';
+import { AppError, accountBlocked } from '../lib/errors';
 
 declare global {
   namespace Express {
@@ -21,10 +21,22 @@ function accessToken(req: Request) {
   return c;
 }
 
-export function requireAuth(req: Request, _res: Response, next: NextFunction) {
+/**
+ * The account is re-read on every request, so a blocked player is cut off at once (not when the access token expires)
+ * and a demoted admin loses the admin routes at once.
+ */
+async function authenticate(req: Request) {
   const t = accessToken(req);
   if (!t) throw new AppError(401, 'UNAUTHORIZED', 'Login required');
   req.user = verifyToken(t, 'access');
+  const [u] = await db.select({ role: users.role, blockedAt: users.blockedAt }).from(users).where(eq(users.id, req.user.id));
+  if (!u) throw new AppError(401, 'UNAUTHORIZED', 'Login required');
+  if (u.blockedAt) throw accountBlocked();
+  return u;
+}
+
+export async function requireAuth(req: Request, _res: Response, next: NextFunction) {
+  await authenticate(req);
   next();
 }
 
@@ -35,11 +47,8 @@ export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
   next();
 }
 
-/** Role is re-read from the DB so a demoted admin loses access immediately. */
-export async function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  requireAuth(req, res, () => undefined);
-  const [u] = await db.select({ role: users.role }).from(users).where(eq(users.id, req.user!.id));
-  if (u?.role !== 'admin') throw new AppError(403, 'FORBIDDEN', 'Admin only');
+export async function requireAdmin(req: Request, _res: Response, next: NextFunction) {
+  if ((await authenticate(req)).role !== 'admin') throw new AppError(403, 'FORBIDDEN', 'Admin only');
   next();
 }
 

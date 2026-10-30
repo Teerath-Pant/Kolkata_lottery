@@ -3,11 +3,16 @@ import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db';
 import { drawTierWinners, draws, packages, tickets, users } from '../db/schema';
-import { notFound } from '../lib/errors';
+import { AppError, notFound } from '../lib/errors';
+import { config } from '../config';
 import { optionalAuth, requireAuth } from '../middleware';
 import { buyTicket } from '../services/buy';
 import { createComplaint, listMyComplaints } from '../services/complaints';
-import { computePrize, publicDraw, publicPackages, takenNumbers, verifyData } from '../services/draws';
+import { createDeposit, listMyDeposits } from '../services/deposits';
+import { createWithdrawal, listMyWithdrawals, withdrawInfo } from '../services/withdrawals';
+import { computePrize, publicDraw, publicPackages, recentWinners, takenNumbers } from '../services/draws';
+import { listNotifications, markAllRead } from '../services/notifications';
+import { UPI_ID_RE, getUpi } from '../services/settings';
 import { walletSummary } from '../services/wallet';
 
 export const gameRouter = Router();
@@ -40,11 +45,7 @@ gameRouter.get('/draws/:id/tickets', async (req, res) => {
   res.json(await takenNumbers(id.parse(req.params.id)));
 });
 
-gameRouter.get('/draws/:id/verify', async (req, res) => {
-  res.json(await verifyData(id.parse(req.params.id)));
-});
-
-const buySchema = z.object({ ticketNo: z.number().int().positive().optional(), random: z.boolean().optional() })
+const buySchema = z.object({ ticketNo: z.number().int().positive().optional(), random: z.boolean().optional(), purchaseGroup: z.string().uuid().optional() })
   .refine((b) => (b.random === true) !== (b.ticketNo !== undefined), { message: 'Send either random:true or ticketNo' });
 
 gameRouter.post('/draws/:id/buy', requireAuth, async (req, res) => {
@@ -56,28 +57,68 @@ gameRouter.post('/draws/:id/buy', requireAuth, async (req, res) => {
 gameRouter.get('/me/tickets', requireAuth, async (req, res) => {
   const rows = await db.select({
     ticketId: tickets.id, drawId: draws.id, ticketNo: tickets.ticketNo, createdAt: tickets.createdAt,
-    packageName: packages.name, theme: packages.theme, price: draws.ticketPrice, status: draws.status, mode: draws.mode,
+    packageName: draws.packageName, theme: draws.theme, price: draws.ticketPrice, status: draws.status,
     drawTime: draws.drawTime, winningTicketNo: draws.winningTicketNo, prizeAmount: draws.prizeAmount,
     won: sql<boolean>`${draws.winnerUserId} = ${tickets.userId}`,
     matchDigits: drawTierWinners.matchDigits, tierPrize: drawTierWinners.prize,
     prizeType: draws.prizeType, prizeValue: draws.prizeValue,
     sold: sql<number>`(SELECT count(*)::int FROM ${tickets} WHERE ${tickets.drawId} = ${draws.id})`,
-  }).from(tickets).innerJoin(draws, eq(draws.id, tickets.drawId)).innerJoin(packages, eq(packages.id, draws.packageId))
+  }).from(tickets).innerJoin(draws, eq(draws.id, tickets.drawId))
     .leftJoin(drawTierWinners, and(eq(drawTierWinners.drawId, tickets.drawId), eq(drawTierWinners.ticketNo, tickets.ticketNo)))
     .where(eq(tickets.userId, req.user!.id)).orderBy(desc(tickets.createdAt)).limit(200);
   // livePrize = the winning prize shown on the ticket: the paid amount once drawn, else what the pool would pay right now
   res.json({ tickets: rows.map(({ prizeType, prizeValue, sold, ...t }) => ({ ...t, livePrize: t.prizeAmount ?? computePrize({ prizeType, prizeValue, ticketPrice: t.price }, sold) })) });
 });
 
+gameRouter.get('/me/notifications', requireAuth, async (req, res) => res.json(await listNotifications(req.user!.id)));
+gameRouter.post('/me/notifications/read', requireAuth, async (req, res) => { await markAllRead(req.user!.id); res.json({ ok: true }); });
+
 gameRouter.get('/me/wallet', requireAuth, async (req, res) => res.json(await walletSummary(req.user!.id)));
 
 gameRouter.post('/me/complaints', requireAuth, async (req, res) => {
-  const body = z.object({ subject: z.string().trim().min(3).max(100), message: z.string().trim().min(10).max(1000) }).parse(req.body);
+  const body = z.object({
+    subject: z.string().trim().min(3).max(100), message: z.string().trim().min(10).max(1000),
+    images: z.array(z.string().max(960_000)).max(3).optional(), // optional screenshots as data URLs, checked in createComplaint
+  }).parse(req.body);
   const c = await createComplaint(req.user!.id, body);
-  res.status(201).json({ complaint: { id: c.id, subject: c.subject, message: c.message, status: c.status, createdAt: c.createdAt, resolvedAt: c.resolvedAt } });
+  res.status(201).json({ complaint: { id: c.id, subject: c.subject, message: c.message, status: c.status, createdAt: c.createdAt, resolvedAt: c.resolvedAt, imageCount: c.imageCount } });
 });
 
 gameRouter.get('/me/complaints', requireAuth, async (req, res) => res.json({ complaints: await listMyComplaints(req.user!.id) }));
+
+// where to pay for add money; upiId null = add money is off
+gameRouter.get('/deposit-info', requireAuth, async (_req, res) => {
+  res.json(await getUpi());
+});
+
+gameRouter.post('/me/deposits', requireAuth, async (req, res) => {
+  if (!(await getUpi()).upiId) throw new AppError(503, 'DEPOSITS_OFF', 'Add money is not available right now');
+  const body = z.object({
+    amount: z.number().int().min(1).max(config.ADMIN_MAX_ADJUST),
+    utr: z.string().trim().regex(/^[A-Za-z0-9]{6,30}$/, 'UTR must be 6-30 letters or digits').optional(),
+  }).parse(req.body);
+  const d = await createDeposit(req.user!.id, body);
+  res.status(201).json({ deposit: { id: d.id, amount: d.amount, utr: d.utr, status: d.status, createdAt: d.createdAt, reviewedAt: d.reviewedAt } });
+});
+
+gameRouter.get('/me/deposits', requireAuth, async (req, res) => res.json({ deposits: await listMyDeposits(req.user!.id) }));
+
+gameRouter.get('/me/withdraw-info', requireAuth, async (req, res) => res.json(await withdrawInfo(req.user!.id)));
+gameRouter.post('/me/withdrawals', requireAuth, async (req, res) => {
+  const body = z.object({
+    amount: z.number().int().min(1).max(config.ADMIN_MAX_ADJUST),
+    upiId: z.string().trim().max(60).regex(UPI_ID_RE, 'Enter a valid UPI ID, like name@bank'),
+    holderName: z.string().trim().min(2, 'Enter the account holder name').max(60),
+  }).parse(req.body);
+  res.status(201).json({ withdrawal: await createWithdrawal(req.user!.id, body) });
+});
+gameRouter.get('/me/withdrawals', requireAuth, async (req, res) => res.json({ withdrawals: await listMyWithdrawals(req.user!.id) }));
+
+// public: polled by the home screen's live winners strip
+gameRouter.get('/winners/recent', async (req, res) => {
+  const { limit } = z.object({ limit: z.coerce.number().int().min(1).max(20).default(10) }).parse(req.query);
+  res.json({ winners: await recentWinners(limit) });
+});
 
 gameRouter.get('/results', async (req, res) => {
   const q = z.object({
@@ -87,10 +128,10 @@ gameRouter.get('/results', async (req, res) => {
   }).parse(req.query);
   const start = q.date ? new Date(`${q.date}T00:00:00.000Z`) : null;
   const rows = await db.select({
-    drawId: draws.id, packageId: draws.packageId, packageName: packages.name, theme: packages.theme,
-    drawTime: draws.drawTime, status: draws.status, mode: draws.mode, winMethod: draws.winMethod,
+    drawId: draws.id, packageId: draws.packageId, packageName: draws.packageName, theme: draws.theme,
+    drawTime: draws.drawTime, status: draws.status, winMethod: draws.winMethod,
     winningTicketNo: draws.winningTicketNo, prizeAmount: draws.prizeAmount, winnerName: users.name,
-  }).from(draws).innerJoin(packages, eq(packages.id, draws.packageId)).leftJoin(users, eq(users.id, draws.winnerUserId))
+  }).from(draws).leftJoin(users, eq(users.id, draws.winnerUserId))
     .where(and(
       eq(draws.status, 'completed'), // cancelled draws have no result to show
       q.packageId ? eq(draws.packageId, q.packageId) : undefined,

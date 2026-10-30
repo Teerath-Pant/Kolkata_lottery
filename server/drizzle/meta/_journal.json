@@ -92,6 +92,118 @@
       "when": 1793167815000,
       "tag": "0012_complaints",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793178529182,
+      "tag": "0013_deposits",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793180645130,
+      "tag": "0014_app_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1793181178334,
+      "tag": "0015_complaint_images",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1793181949703,
+      "tag": "0016_notifications_bulk_bonus",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793182807294,
+      "tag": "0017_draw_sales_window",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793183261004,
+      "tag": "0018_package_sales_window",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793183972631,
+      "tag": "0019_run_once_schedule",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793185524375,
+      "tag": "0020_wallet_split",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793248205614,
+      "tag": "0021_bonus_wallet",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793249655894,
+      "tag": "0022_purchase_wallet",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793250129661,
+      "tag": "0023_referral_bonus",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793250941676,
+      "tag": "0024_draw_package_snapshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793251778522,
+      "tag": "0025_user_block",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793251998181,
+      "tag": "0026_ledger_note",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1793253158384,
+      "tag": "0027_withdrawals",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1793357765204,
+      "tag": "0028_package_buy_dates",
+      "breakpoints": true
     }
   ]
 }

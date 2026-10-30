@@ -12,6 +12,7 @@ export default defineConfig({
       JWT_ACCESS_SECRET: 'test-access-secret-0123456789',
       JWT_REFRESH_SECRET: 'test-refresh-secret-0123456789',
       BUY_CUTOFF_SECONDS: '30',
+      WELCOME_BONUS: '0', // the welcome bonus has its own test; the others count exact balances
       PACKAGES_CACHE_MS: '0',
       OTP_RESEND_SECONDS: '0',
       ADMIN_USERNAME: '9999999999',

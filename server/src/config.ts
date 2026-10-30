@@ -15,7 +15,10 @@ const schema = z.object({
   REFRESH_TTL: z.string().default('30d'),
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
   RUN_CRON: z.string().default('true'),
-  SIGNUP_BONUS: z.coerce.number().int().min(0).default(500),
+  // paid to a new player's own bonus wallet when they sign up (0 = off)
+  WELCOME_BONUS: z.coerce.number().int().min(0).default(50),
+  // paid to the referrer's bonus wallet when a new player signs up with their code (0 = off)
+  REFERRAL_BONUS: z.coerce.number().int().min(0).default(25),
   BUY_CUTOFF_SECONDS: z.coerce.number().int().min(0).default(30),
   BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
   ADMIN_USERNAME: z.string().default('admin'),
@@ -34,6 +37,7 @@ const schema = z.object({
   OTP_MAX_SENDS_PER_HOUR: z.coerce.number().int().min(1).default(5),
   // largest single admin coin adjustment, and the largest balance a wallet may hold (keeps every amount a safe JS integer)
   ADMIN_MAX_ADJUST: z.coerce.number().int().min(1).default(1_000_000),
+  WITHDRAW_MIN: z.coerce.number().int().min(1).default(100), // smallest withdrawal a player can ask for
   // how long GET /packages is served from memory (0 = always fresh)
   PACKAGES_CACHE_MS: z.coerce.number().int().min(0).default(2000),
 });

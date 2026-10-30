@@ -1,20 +1,23 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { Exec, db } from '../db';
 import { config } from '../config';
 import { drawTierPrizes, drawTierWinners, draws, packageTierPrizes, packages, tickets, users } from '../db/schema';
-import { AppError, notFound } from '../lib/errors';
+import { notFound } from '../lib/errors';
 import { newSeed, sha256 } from '../lib/fair';
 
 type Pkg = typeof packages.$inferSelect;
 type Draw = typeof draws.$inferSelect;
 
-/** Open a new draw for a package, snapshotting package rules and committing to a fresh seed. */
+/**
+ * Open a new draw for a package, snapshotting package rules. The admin always picks the winner (see drawJob);
+ * the seed only drives the Pick grid's suggested numbers.
+ */
 export async function openDraw(tx: Exec, pkg: Pkg, drawTime: Date) {
   const seed = newSeed();
   const [d] = await tx.insert(draws).values({
-    packageId: pkg.id, drawTime, status: 'open', mode: 'random',
+    packageId: pkg.id, drawTime, status: 'open', mode: 'admin_selected',
     ticketPrice: pkg.price, prizeType: pkg.prizeType, prizeValue: pkg.prizeValue,
-    maxTickets: pkg.maxTickets,
+    maxTickets: pkg.maxTickets, packageName: pkg.name, theme: pkg.theme,
     serverSeed: seed, serverSeedHash: sha256(seed),
   }).returning();
   await snapshotTierPrizes(tx, d.id, pkg.id);
@@ -50,10 +53,11 @@ const IST_OFFSET_MS = 330 * 60_000; // daily draw times are Indian Standard Time
 const DAY_MS = 86_400_000;
 
 /**
- * Next draw time for a package: the next daily HH:MM (IST) strictly after `after`,
+ * Next draw time for a package: the run-once moment, the next daily HH:MM (IST) strictly after `after`,
  * or, for interval packages, the next slot on the interval grid anchored at `anchor`.
  */
-export function nextDrawFor(pkg: Pick<Pkg, 'drawIntervalMinutes' | 'dailyTime'>, anchor: Date, after: Date) {
+export function nextDrawFor(pkg: Pick<Pkg, 'drawIntervalMinutes' | 'dailyTime' | 'runOnceAt'>, anchor: Date, after: Date) {
+  if (pkg.runOnceAt) return pkg.runOnceAt; // the one and only draw
   if (pkg.dailyTime) {
     const [h, m] = pkg.dailyTime.split(':').map(Number);
     const istDayStart = Math.floor((after.getTime() + IST_OFFSET_MS) / DAY_MS) * DAY_MS;
@@ -62,6 +66,54 @@ export function nextDrawFor(pkg: Pick<Pkg, 'drawIntervalMinutes' | 'dailyTime'>,
     return new Date(t);
   }
   return nextDrawTime(anchor, pkg.drawIntervalMinutes!, after);
+}
+
+const hhmmMinutes = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+/** First instant strictly after `after` whose Indian Standard Time clock reads hhmm. */
+function nextClock(hhmm: string, after: number) {
+  const istDayStart = Math.floor((after + IST_OFFSET_MS) / DAY_MS) * DAY_MS - IST_OFFSET_MS;
+  const t = istDayStart + hhmmMinutes(hhmm) * 60_000;
+  return t <= after ? t + DAY_MS : t;
+}
+
+/**
+ * When tickets of a draw can be bought, as the package sets it.
+ * No package window: from the moment the draw opened until BUY_CUTOFF_SECONDS before draw_time.
+ * With a fixed window (start/end dates): exactly that window. With a daily window (start/end, IST): the window that is
+ * running now, or else the next one. Either way the end is also never later than the cutoff. start >= end means this
+ * draw can no longer be bought (its next window opens after it closes).
+ */
+export function salesWindow(d: Pick<Draw, 'drawTime' | 'createdAt'>, p: Pick<Pkg, 'buyStartTime' | 'buyEndTime' | 'buyStartAt' | 'buyEndAt'>, now = new Date()) {
+  const cutoff = d.drawTime.getTime() - config.BUY_CUTOFF_SECONDS * 1000;
+  if (p.buyStartAt && p.buyEndAt) return { start: p.buyStartAt, end: new Date(Math.min(p.buyEndAt.getTime(), cutoff)), restricted: true };
+  if (!p.buyStartTime || !p.buyEndTime) return { start: d.createdAt, end: new Date(cutoff), restricted: false };
+  const n = now.getTime();
+  let start = nextClock(p.buyStartTime, n) - DAY_MS; // latest start time at or before now
+  let end = nextClock(p.buyEndTime, start);
+  if (n >= end) { start = nextClock(p.buyStartTime, n); end = nextClock(p.buyEndTime, start); }
+  return { start: new Date(start), end: new Date(Math.min(end, cutoff)), restricted: true };
+}
+
+const fmtIst = (d: Date) => d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+/** " (sales are open ...)" for error messages, or '' when the package has no buy window. */
+export const salesWindowHint = (p: Pick<Pkg, 'buyStartTime' | 'buyEndTime' | 'buyStartAt' | 'buyEndAt'>) =>
+  p.buyStartAt && p.buyEndAt ? ` (sales are open ${fmtIst(p.buyStartAt)} to ${fmtIst(p.buyEndAt)} IST)`
+    : p.buyStartTime ? ` (sales are open daily ${p.buyStartTime} to ${p.buyEndTime} IST)` : '';
+
+/** "9876543210" -> "98******10": a login ID is half the key to an account, so the public list never carries it whole. */
+export const maskId = (id: string) =>
+  id.length <= 4 ? `${id.slice(0, 1)}${'*'.repeat(Math.max(0, id.length - 1))}` : `${id.slice(0, 2)}${'*'.repeat(Math.min(id.length - 4, 6))}${id.slice(-2)}`;
+
+/** Newest results that had a winner, for the live winners strip on the home screen. Uses the (status, draw_time) index. */
+export async function recentWinners(limit = 10) {
+  const rows = await db.select({
+    drawId: draws.id, packageName: draws.packageName, drawTime: draws.drawTime, amount: draws.prizeAmount,
+    winnerName: users.name, loginId: users.username,
+  }).from(draws)
+    .innerJoin(users, eq(users.id, draws.winnerUserId))
+    .where(eq(draws.status, 'completed'))
+    .orderBy(desc(draws.drawTime)).limit(limit);
+  return rows.map(({ loginId, ...r }) => ({ ...r, winnerId: maskId(loginId) }));
 }
 
 export const computePrize = (d: Pick<Draw, 'prizeType' | 'prizeValue' | 'ticketPrice'>, sold: number) =>
@@ -97,15 +149,14 @@ async function baseDraws(ids: number[]) {
 }
 
 function baseView(d: Draw, p: Pkg, sold: number, tiers: { matchDigits: number; prize: number; winners: number | null }[], winnerName: string | null) {
-  const finished = d.status === 'completed' || d.status === 'cancelled';
   return {
-    id: d.id, packageId: d.packageId, packageName: p.name, theme: p.theme,
-    status: d.status, mode: d.mode, drawTime: d.drawTime,
+    id: d.id, packageId: d.packageId, packageName: d.packageName, theme: d.theme,
+    status: d.status, drawTime: d.drawTime,
+    salesStart: salesWindow(d, p).start, salesEnd: salesWindow(d, p).end,
+    buyStartTime: p.buyStartTime, buyEndTime: p.buyEndTime, buyStartAt: p.buyStartAt, buyEndAt: p.buyEndAt,
     ticketPrice: d.ticketPrice, prizeType: d.prizeType, prizeValue: d.prizeValue,
     prizeAmount: d.prizeAmount ?? computePrize(d, sold),
     maxTickets: d.maxTickets, soldCount: sold,
-    serverSeedHash: d.serverSeedHash,
-    serverSeed: finished ? d.serverSeed : null, // the seed is only exposed once the draw is finished
     winningTicketNo: d.winningTicketNo, winMethod: d.winMethod, winnerName, completedAt: d.completedAt,
     tiers,
   };
@@ -135,7 +186,7 @@ async function withViewer(ids: number[], base: Base, viewerId?: number) {
   });
 }
 
-/** Public view of a draw. The server seed is only exposed once the draw is finished. */
+/** Public view of a draw. */
 export async function publicDraw(drawId: number, viewerId?: number) {
   const [d] = await withViewer([drawId], await baseDraws([drawId]), viewerId);
   if (!d) throw notFound('Draw');
@@ -197,19 +248,4 @@ export async function takenNumbers(drawId: number) {
   const taken = rows.map((r) => r.n);
   const offers = ticketOffers(d.serverSeedHash, new Set(taken), Math.min(OFFER_SLOTS, Math.max(0, d.maxTickets - taken.length)));
   return { drawId, maxTickets: d.maxTickets, taken, offers };
-}
-
-export async function verifyData(drawId: number) {
-  const [d] = await db.select().from(draws).where(eq(draws.id, drawId));
-  if (!d) throw notFound('Draw');
-  if (d.status !== 'completed' && d.status !== 'cancelled') {
-    throw new AppError(409, 'NOT_FINISHED', 'Draw not finished yet; seed is revealed after the draw');
-  }
-  const sold = await db.select({ n: tickets.ticketNo }).from(tickets).where(eq(tickets.drawId, drawId)).orderBy(asc(tickets.ticketNo));
-  return {
-    drawId: d.id, status: d.status, mode: d.mode, winMethod: d.winMethod,
-    serverSeedHash: d.serverSeedHash, serverSeed: d.serverSeed,
-    soldTickets: sold.map((s) => s.n), winningTicketNo: d.winningTicketNo,
-    formula: 'winner = sortedSoldTickets[ HMAC_SHA256(key=serverSeed, message=String(drawId)) mod soldCount ]',
-  };
 }

@@ -5,7 +5,8 @@ import {
 
 export const roleEnum = pgEnum('role', ['user', 'admin']);
 export const ledgerTypeEnum = pgEnum('ledger_type', [
-  'signup_bonus', 'daily_claim', 'ticket_purchase', 'prize', 'refund', 'admin_adjust',
+  'signup_bonus', 'daily_claim', 'ticket_purchase', 'prize', 'refund', 'admin_adjust', 'deposit', 'bulk_bonus', 'referral_bonus',
+  'withdrawal',
 ]);
 export const prizeTypeEnum = pgEnum('prize_type', ['fixed', 'pool_percent']);
 export const themeEnum = pgEnum('theme', [
@@ -14,6 +15,8 @@ export const themeEnum = pgEnum('theme', [
 export const drawStatusEnum = pgEnum('draw_status', ['open', 'drawing', 'completed', 'cancelled']);
 export const drawModeEnum = pgEnum('draw_mode', ['random', 'admin_selected']);
 export const complaintStatusEnum = pgEnum('complaint_status', ['open', 'resolved']);
+export const depositStatusEnum = pgEnum('deposit_status', ['pending', 'approved', 'rejected']);
+export const withdrawalStatusEnum = pgEnum('withdrawal_status', ['pending', 'approved', 'rejected']);
 
 const ts = (name: string) => timestamp(name, { withTimezone: true });
 const big = (name: string) => bigint(name, { mode: 'number' });
@@ -30,6 +33,7 @@ export const users = pgTable('users', {
   referralCode: text('referral_code').notNull().unique()
     .default(sql`upper(substr(md5(random()::text || clock_timestamp()::text), 1, 8))`),
   referredBy: integer('referred_by').references((): AnyPgColumn => users.id), // null only for the root (admin)
+  blockedAt: ts('blocked_at'), // set by an admin: no login and no API access until unblocked
 }, (t) => [index('users_referred_by_idx').on(t.referredBy)]);
 
 // Referral tree as a closure table: one row per (ancestor, descendant) pair, depth 1 = direct referral.
@@ -46,9 +50,19 @@ export const referralTree = pgTable('referral_tree', {
 
 export const wallets = pgTable('wallets', {
   userId: integer('user_id').primaryKey().references(() => users.id),
+  // balance is the total wallet = purchase + income + bonus (the database enforces the sum). purchase_balance: money added,
+  // refunds, admin credits; income_balance: prizes won; bonus_balance: referral / bulk-buy bonuses.
+  // Tickets are paid from the purchase wallet first, then the bonus wallet, then the income wallet.
   balance: big('balance').notNull().default(0),
+  purchaseBalance: big('purchase_balance').notNull().default(0),
+  incomeBalance: big('income_balance').notNull().default(0),
+  bonusBalance: big('bonus_balance').notNull().default(0),
   updatedAt: ts('updated_at').notNull().defaultNow(),
-}, (t) => [check('wallet_balance_nonneg', sql`${t.balance} >= 0`)]);
+}, (t) => [
+  check('wallet_balance_nonneg', sql`${t.balance} >= 0`),
+  check('wallet_parts_nonneg', sql`${t.purchaseBalance} >= 0 AND ${t.incomeBalance} >= 0 AND ${t.bonusBalance} >= 0`),
+  check('wallet_total_sum', sql`${t.balance} = ${t.purchaseBalance} + ${t.incomeBalance} + ${t.bonusBalance}`),
+]);
 
 export const walletLedger = pgTable('wallet_ledger', {
   id: serial('id').primaryKey(),
@@ -56,10 +70,12 @@ export const walletLedger = pgTable('wallet_ledger', {
   amount: big('amount').notNull(),
   type: ledgerTypeEnum('type').notNull(),
   refId: integer('ref_id'),
+  note: text('note'), // free text shown as the statement remark, e.g. the reason an admin gave for an adjustment
   balanceAfter: big('balance_after').notNull(),
   createdAt: ts('created_at').notNull().defaultNow(),
 }, (t) => [
   index('ledger_user_created_idx').on(t.userId, t.createdAt),
+  index('ledger_created_idx').on(t.createdAt, t.id), // the all-players wallet statement, newest first
   // prize / refund can only be paid once per user per draw (belt and braces for job idempotency)
   uniqueIndex('ledger_pay_once_idx').on(t.userId, t.refId, t.type).where(sql`type IN ('prize','refund')`),
 ]);
@@ -71,9 +87,16 @@ export const packages = pgTable('packages', {
   prizeType: prizeTypeEnum('prize_type').notNull(),
   prizeValue: big('prize_value').notNull(),
   maxTickets: integer('max_tickets').notNull(),
-  // schedule: EITHER repeat every N minutes OR once a day at daily_time ("HH:MM", Indian Standard Time)
+  // schedule: exactly one of: repeat every N minutes, once a day at daily_time ("HH:MM", Indian Standard Time), or run once at run_once_at
   drawIntervalMinutes: integer('draw_interval_minutes'),
   dailyTime: text('daily_time'),
+  runOnceAt: ts('run_once_at'), // one single draw at this moment, then the package switches itself off
+  // ticket sales window, every day in Indian Standard Time ("HH:MM"); both null = tickets can be bought any time until the cutoff
+  buyStartTime: text('buy_start_time'),
+  buyEndTime: text('buy_end_time'),
+  // or one fixed window (e.g. opens a few days from now): when both are set it replaces the daily one
+  buyStartAt: ts('buy_start_at'),
+  buyEndAt: ts('buy_end_at'),
   theme: themeEnum('theme').notNull(),
   isActive: boolean('is_active').notNull().default(true),
   // soft delete: the row stays so past draws, results and the audit log keep their package
@@ -83,7 +106,11 @@ export const packages = pgTable('packages', {
   check('pkg_max_range', sql`${t.maxTickets} BETWEEN 1 AND 9999`),
   check('pkg_interval_pos', sql`${t.drawIntervalMinutes} IS NULL OR ${t.drawIntervalMinutes} > 0`),
   check('pkg_daily_time_fmt', sql`${t.dailyTime} IS NULL OR ${t.dailyTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`),
-  check('pkg_one_schedule', sql`(${t.drawIntervalMinutes} IS NULL) <> (${t.dailyTime} IS NULL)`),
+  check('pkg_one_schedule', sql`num_nonnulls(${t.drawIntervalMinutes}, ${t.dailyTime}, ${t.runOnceAt}) = 1`),
+  check('pkg_buy_time_fmt', sql`(${t.buyStartTime} IS NULL OR ${t.buyStartTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$') AND (${t.buyEndTime} IS NULL OR ${t.buyEndTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$')`),
+  check('pkg_buy_time_pair', sql`(${t.buyStartTime} IS NULL) = (${t.buyEndTime} IS NULL) AND (${t.buyStartTime} IS NULL OR ${t.buyStartTime} <> ${t.buyEndTime})`),
+  check('pkg_buy_at_pair', sql`(${t.buyStartAt} IS NULL) = (${t.buyEndAt} IS NULL) AND (${t.buyStartAt} IS NULL OR ${t.buyStartAt} < ${t.buyEndAt})`),
+  check('pkg_buy_one_window', sql`${t.buyStartAt} IS NULL OR ${t.buyStartTime} IS NULL`),
 ]);
 
 // Consolation prizes by leading-digit match with the winning ticket (1..5 digits; 6 = the main prize).
@@ -115,6 +142,9 @@ export const draws = pgTable('draws', {
   prizeType: prizeTypeEnum('prize_type').notNull(),
   prizeValue: big('prize_value').notNull(),
   maxTickets: integer('max_tickets').notNull(),
+  // copied from the package at open time (like price / prize above), so renaming a package never rewrites past tickets and results
+  packageName: text('package_name').notNull(),
+  theme: themeEnum('theme').notNull(),
   serverSeedHash: text('server_seed_hash').notNull(),
   serverSeed: text('server_seed'), // null until reveal
   createdAt: ts('created_at').notNull().defaultNow(),
@@ -140,9 +170,12 @@ export const tickets = pgTable('tickets', {
   drawId: integer('draw_id').notNull().references(() => draws.id),
   userId: integer('user_id').notNull().references(() => users.id),
   ticketNo: integer('ticket_no').notNull(),
+  // set by the app on every ticket of one purchase (several tickets booked together); drives the bulk-buy bonus
+  purchaseGroup: text('purchase_group'),
   createdAt: ts('created_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('tickets_draw_no_uq').on(t.drawId, t.ticketNo),
+  index('tickets_group_idx').on(t.drawId, t.userId, t.purchaseGroup),
   index('tickets_draw_user_idx').on(t.drawId, t.userId),
   index('tickets_user_idx').on(t.userId),
 ]);
@@ -185,6 +218,78 @@ export const complaints = pgTable('complaints', {
   index('complaints_user_created_idx').on(t.userId, t.createdAt),
   index('complaints_status_idx').on(t.status, t.createdAt),
 ]);
+
+// Bell messages for a player: bulk-buy bonus, add-money approved / rejected. readAt null = unread.
+export const notifications = pgTable('notifications', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id),
+  type: text('type').notNull(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  readAt: ts('read_at'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+}, (t) => [index('notifications_user_idx').on(t.userId, t.id)]);
+
+// Optional screenshots sent with a complaint (max 3): base64 of a checked JPEG / PNG / WebP.
+// Kept off `complaints` so no list query ever drags the images along.
+export const complaintImages = pgTable('complaint_images', {
+  id: serial('id').primaryKey(),
+  complaintId: integer('complaint_id').notNull().references(() => complaints.id),
+  mime: text('mime').notNull(),
+  data: text('data').notNull(),
+}, (t) => [index('complaint_images_complaint_idx').on(t.complaintId)]);
+
+// Add-money requests: the player pays by UPI QR and confirms; an admin checks the payment and approves
+// (wallet credited once, ledger type 'deposit' with ref_id = request id) or rejects (nothing credited).
+export const depositRequests = pgTable('deposit_requests', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id),
+  amount: big('amount').notNull(),
+  utr: text('utr'), // UPI transaction reference the player typed, optional
+  status: depositStatusEnum('status').notNull().default('pending'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  reviewedAt: ts('reviewed_at'),
+  reviewedBy: integer('reviewed_by').references(() => users.id),
+}, (t) => [
+  index('deposits_user_created_idx').on(t.userId, t.createdAt),
+  index('deposits_status_idx').on(t.status, t.createdAt),
+  // one UTR cannot back two live requests (a rejected one may be sent again)
+  uniqueIndex('deposits_utr_uq').on(t.utr).where(sql`utr IS NOT NULL AND status <> 'rejected'`),
+  check('deposit_amount_pos', sql`${t.amount} > 0`),
+]);
+
+// Withdrawal: the player asks for an amount; nothing leaves the wallet until the admin approves. Approve takes it out of the
+// wallets (income wallet first) and the admin pays it to the player's UPI ID; reject takes nothing.
+export const withdrawalRequests = pgTable('withdrawal_requests', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id),
+  amount: big('amount').notNull(),
+  upiId: text('upi_id').notNull(), // where the player wants the money
+  holderName: text('holder_name').notNull(),
+  // how much of the amount each wallet paid, filled in on approve
+  fromIncome: big('from_income').notNull().default(0),
+  fromPurchase: big('from_purchase').notNull().default(0),
+  fromBonus: big('from_bonus').notNull().default(0),
+  status: withdrawalStatusEnum('status').notNull().default('pending'),
+  payoutRef: text('payout_ref'), // admin: UPI reference of the payout, on approve
+  note: text('note'), // admin: reason, on reject
+  createdAt: ts('created_at').notNull().defaultNow(),
+  reviewedAt: ts('reviewed_at'),
+  reviewedBy: integer('reviewed_by').references(() => users.id),
+}, (t) => [
+  index('withdrawals_user_created_idx').on(t.userId, t.createdAt),
+  index('withdrawals_status_idx').on(t.status, t.createdAt),
+  uniqueIndex('withdrawals_one_pending_uq').on(t.userId).where(sql`status = 'pending'`), // one request at a time
+  check('withdrawal_amount_pos', sql`${t.amount} > 0`),
+]);
+
+// Admin-editable settings, one row per key (e.g. 'upi': the UPI ID and payee name behind the add-money QR).
+export const appSettings = pgTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: jsonb('value').notNull(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  updatedBy: integer('updated_by').references(() => users.id),
+});
 
 // Refresh tokens are single-use: each refresh revokes the presented token and issues the next one in the same
 // family. Presenting an already-used token (theft signal) revokes the whole family. Logout revokes the family.

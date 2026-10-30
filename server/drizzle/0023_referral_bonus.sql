@@ -1,0 +1,1 @@
+ALTER TYPE "public"."ledger_type" ADD VALUE 'referral_bonus';

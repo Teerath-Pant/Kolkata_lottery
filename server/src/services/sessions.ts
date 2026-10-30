@@ -2,7 +2,7 @@ import { and, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { refreshTokens, users } from '../db/schema';
 import { signTokens, verifyToken } from '../lib/auth';
-import { AppError } from '../lib/errors';
+import { AppError, accountBlocked } from '../lib/errors';
 
 type User = typeof users.$inferSelect;
 
@@ -43,6 +43,10 @@ export async function rotateSession(refreshToken: string, now = new Date()) {
 
   const [u] = await db.select().from(users).where(eq(users.id, claims.id));
   if (!u) throw new AppError(401, 'UNAUTHORIZED', 'Session expired, please log in again');
+  if (u.blockedAt) {
+    await revokeFamily(claims.fam, now);
+    throw accountBlocked();
+  }
   return { user: u, tokens: await issue(u, claims.fam) };
 }
 
